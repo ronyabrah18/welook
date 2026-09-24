@@ -1,0 +1,9 @@
+/b2_download_file_by_id
+/artifacts/
+/.venv/
+/.uv-cache/
+/.env
+__pycache__/
+.DS_Store
+/transform/target/
+/transform/logs/

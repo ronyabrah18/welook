@@ -1,0 +1,8 @@
+firmable_intelligence:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('FIRMABLE_DB_PATH', '../artifacts/warehouse/sales.duckdb') }}"
+      schema: analytics
+      threads: 2

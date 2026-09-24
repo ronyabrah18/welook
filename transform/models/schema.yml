@@ -1,0 +1,21 @@
+version: 2
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: observations
+models:
+  - name: stg_observations
+    description: Distinct observations, retaining provenance and original vulnerability metadata.
+    columns:
+      - name: observation_id
+        data_tests: [not_null, unique]
+      - name: source_line
+        data_tests: [not_null]
+      - name: observed_at
+        data_tests: [not_null]
+      - name: transport
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [tcp, udp]

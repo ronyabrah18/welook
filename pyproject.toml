@@ -1,0 +1,6 @@
+[project]
+name = "welook"
+version = "0.1.0"
+description = "WeLook — cybersecurity sales intelligence grounded in evidence"
+requires-python = ">=3.12,<3.13"
+dependencies = ["duckdb>=1.4,<2", "pyarrow>=18", "dbt-duckdb>=1.9,<2"]

@@ -1,0 +1,8 @@
+name: firmable_intelligence
+version: '1.0.0'
+config-version: 2
+profile: firmable_intelligence
+model-paths: [models]
+models:
+  firmable_intelligence:
+    +materialized: view
