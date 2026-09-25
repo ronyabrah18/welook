@@ -33,14 +33,14 @@ Local supporting artifacts: `artifacts/full_scan/profile.json`, `artifacts/full_
 
 ## Chosen use cases
 
-1. **Choose accounts to investigate.** Filter candidates by signal category, attribution status, evidence date, and review status. Display infrastructure country separately. Company-territory filtering uses only sourced company geography, with an explicit unknown group. Sector/size filters are only available if enrichment supports them.
-2. **Understand why an account appears.** An account detail page shows observation references, timestamps, provider versus candidate business, signals, conflicting evidence, and missing information. Do not transfer all observations on a shared IP to every domain associated with it.
-3. **Take the next useful action.** Save an account to a shortlist; mark needs research, reviewed for outreach, or dismissed; export a concise prospect brief. Provide a proposed buyer role and reviewed contact route when known. Otherwise, show the required contact research. Drafting must preserve uncertainty; sending email is outside scope.
+1. **Choose accounts to investigate.** Filter the hosted queue by candidate domain, investigation tier, attribution status, and technical signal. Dates remain visible in account detail. The source covers only a short snapshot window, so a recency filter would create false precision. Company territory, sector, and size are unknown; infrastructure country is shown only as observation evidence, never as a company-location filter.
+2. **Understand why an account appears.** Account detail shows observation references, timestamps, infrastructure provider versus candidate domain, technical signals, and contradictory fields. Do not transfer all observations on a shared IP to every domain associated with it.
+3. **Take the next useful action.** Save accounts in a session shortlist and export a prospect brief, or use the research queue when association is unclear. The app does not invent a decision-maker or contact route. Drafting and sending email are outside this prototype.
 
 ## Proposed screens
 
 - Account queue: candidate domain/name, technical relevance, attribution status, strongest signal, observed date, and next action.
-- Account detail: evidence, possible business relevance, what remains unknown, suggested buyer role, research links, and a template-based outreach starter.
+- Account detail: evidence, possible business relevance, what remains unknown, and a suggested research action.
 - Research queue: unresolved account ownership, unsupported signals, missing contact route, and reason for review.
 
 ## Rule and LLM split

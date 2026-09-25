@@ -21,7 +21,8 @@ def query(sql: str, params: list | None = None):
         return con.execute(sql, params or []).fetchdf()
 
 
-def account_rows(search: str, tiers: list[str], attribution: list[str], limit: int = 100):
+def account_rows(search: str, tiers: list[str], attribution: list[str], limit: int = 100,
+                 signal: str = "Any signal"):
     conditions = ["1=1"]
     params: list = []
     if search:
@@ -33,6 +34,13 @@ def account_rows(search: str, tiers: list[str], attribution: list[str], limit: i
     if attribution:
         conditions.append("attribution_status IN (SELECT unnest(?))")
         params.append(attribution)
+    signal_columns = {
+        "Scanner-verified association": "a.verified_vulnerability_association_count",
+        "Admin or login page": "a.admin_or_login_observation_count",
+        "Any vulnerability association": "a.vulnerability_association_count",
+    }
+    if signal != "Any signal":
+        conditions.append(f"{signal_columns[signal]} > 0")
     params.append(limit)
     return query(
         "SELECT a.candidate_domain, a.priority_tier, a.attribution_status, a.investigation_score, "
@@ -112,7 +120,9 @@ with prospects:
     tiers = middle.multiselect("Priority", ["investigate_first", "research", "low_evidence"],
                                 default=["investigate_first", "research"])
     attribution = right.multiselect("Attribution", ["supported", "partial", "unresolved", "provider_only"])
-    matches = account_rows(search, tiers, attribution)
+    signal = st.selectbox("Technical signal", ["Any signal", "Scanner-verified association",
+                                               "Admin or login page", "Any vulnerability association"])
+    matches = account_rows(search, tiers, attribution, signal=signal)
     st.caption(f"Showing {len(matches):,} highest-ranked matching accounts. Search by domain to narrow further.")
     st.dataframe(matches, hide_index=True, width="stretch")
     if len(matches):
