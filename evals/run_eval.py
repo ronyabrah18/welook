@@ -104,13 +104,22 @@ def main():
                                     "error": f"{type(exc).__name__}: {str(exc)[:200]}"})
             print(f"{version}: {index}/{len(cases)}", flush=True)
         version_metrics = metrics(cases, predictions)
+        version_metrics["by_split"] = {
+            split: metrics([case for case in cases if case["split"] == split], predictions)
+            for split in ("development", "held_out")
+        }
         report["versions"][version] = version_metrics
         with (args.output_dir / f"predictions_{version}.jsonl").open("w") as out:
             for prediction in predictions:
                 out.write(json.dumps(prediction, ensure_ascii=False) + "\n")
     if len(versions) == 2:
-        report["comparison"] = {"macro_f1_delta_v2_minus_v1":
-                                report["versions"]["v2"]["macro_f1"] - report["versions"]["v1"]["macro_f1"]}
+        report["comparison"] = {
+            "macro_f1_delta_v2_minus_v1":
+                report["versions"]["v2"]["macro_f1"] - report["versions"]["v1"]["macro_f1"],
+            "held_out_macro_f1_delta_v2_minus_v1":
+                report["versions"]["v2"]["by_split"]["held_out"]["macro_f1"]
+                - report["versions"]["v1"]["by_split"]["held_out"]["macro_f1"],
+        }
     (args.output_dir / "results.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
 
