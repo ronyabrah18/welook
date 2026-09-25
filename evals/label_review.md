@@ -2,6 +2,8 @@
 
 These 25 labels are draft judgements over the supplied evidence, not verified legal ownership. Review the `expected` label and rationale before using them as a hand-labelled evaluation set. The JSONL file contains the exact evidence bundle for each case.
 
+For a readable view of the host, certificate, page title, provider, and proposed decision for every case, use [the review cards](review_cards.md). Record any case IDs you would relabel before the live eval.
+
 | ID | Split | Candidate domain | Expected | Why |
 | --- | --- | --- | --- | --- |
 | S01 | development | ahk.nl | supported | HTTP host and certificate both name a subdomain of the candidate. |

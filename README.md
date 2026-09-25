@@ -39,6 +39,8 @@ The second command validates eval cases without API calls. After reviewing [the 
 
 ## Submission documents
 
+The [eval review cards](evals/review_cards.md) show the exact evidence behind each proposed label so a reviewer can approve or correct the set before measuring model quality.
+
 - [Planning and sales use cases](docs/planning.md)
 - [System architecture](docs/architecture.md) and [detailed engineering notes](docs/architecture-notes.md)
 - [Skill](skills/account-research/SKILL.md), [prompts](prompts/account-research/), and [evals](evals/)
