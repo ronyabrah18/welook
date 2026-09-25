@@ -6,16 +6,9 @@ WeLook turns the supplied internet-service observations into an evidence-backed 
 
 ## How it works
 
-```mermaid
-flowchart LR
-  A["Supplied JSONL.zst<br/>12.44 GB"] --> B["Streamed Python load<br/>bronze and silver Parquet"]
-  B --> C["DuckDB + dbt<br/>425,121 candidate domains"]
-  C --> D["Rules and source-linked evidence<br/>investigation tiers"]
-  D --> E["Read-only serving snapshot<br/>50,000 ranked candidates"]
-  E --> F["Private Streamlit app<br/>research, shortlist, CSV"]
-  D -. "selected uncertain cases" .-> G["Offline AI assessment<br/>versioned prompts and traces"]
-  G -. "publish reviewed decisions" .-> E
-```
+![WeLook architecture overview](docs/diagrams/welook-architecture-preview.png)
+
+[Download the editable Excalidraw diagram](docs/diagrams/welook-architecture.excalidraw) and open it in Excalidraw to move or annotate each component.
 
 The solid path is running end to end. The optional AI workflow is offline; no AI assessments are in the hosted snapshot yet. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
 

@@ -10,6 +10,8 @@ The supplied snapshot is the core dataset: **11,768,718 service observations** i
 
 ## Data flow
 
+An [editable Excalidraw version](diagrams/welook-architecture.excalidraw) and [PNG preview](diagrams/welook-architecture-preview.png) are available for walkthroughs.
+
 ```mermaid
 flowchart LR
   L[Original JSONL.zst<br/>landing] --> B[Bronze Parquet<br/>full raw records + lineage]
