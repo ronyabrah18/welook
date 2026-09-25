@@ -67,8 +67,9 @@ class BudgetedAssessor:
         if model not in MODEL_RATES:
             raise ValueError("Model has no reviewed rate card")
         load_dotenv(ROOT / ".env")
-        if not os.getenv("OPENAI_API_KEY"):
-            raise RuntimeError("OPENAI_API_KEY is missing; keep it in the ignored .env file")
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or api_key == "replace_with_your_api_key":
+            raise RuntimeError("OPENAI_API_KEY is not configured; keep the real key in the ignored .env file")
         self.client = OpenAI(max_retries=0, timeout=30)
         self.model = model
         self.artifact_dir = artifact_dir
