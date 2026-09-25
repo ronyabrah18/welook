@@ -2,7 +2,7 @@
 
 Design v1 · 25 September 2026 · target submission 27 September 2026
 
-**Status:** target design, not a claim that all components are implemented. The full source has been profiled; only the 5,000-record development sample has been loaded into typed Parquet/DuckDB and passed the first six dbt tests. Full bronze/silver ingestion, account resolution, AI evaluation, and the hosted app remain to build.
+**Status:** detailed design and implementation notes. Full bronze/silver ingestion, account models, and a local Streamlit app are complete. Hosting and measured LLM evaluation remain to finish. See the [short architecture](architecture.md) and README for current counts.
 
 ## 1. Product and scope
 
@@ -71,7 +71,7 @@ The separate [editable diagram](diagrams/welook-architecture.mmd) contains the s
 | AI | One provider adapter + structured output validation | Selective evidence interpretation; prompts, results, and costs versioned. |
 | Interface | Streamlit | Python app with native tables, filters, detail views, and download buttons. |
 | Hosting | Streamlit Community Cloud, subject to deployment checks | Free hosting with public/private GitHub integration. Only app dependencies and serving data ship. |
-| CI | Small GitHub Actions workflow | Synthetic fixtures, Python checks, dbt tests; no full dataset or paid calls in routine CI. |
+| Checks | Local one-command fixture and eval validation checks | CI can run these later; no full dataset or paid calls are needed for routine checks. |
 
 PyArrow supports Parquet/Zstd writing ([documentation](https://arrow.apache.org/docs/python/parquet.html)). DuckDB's file access model motivates separate batch-build and read-only serving files ([concurrency documentation](https://duckdb.org/docs/lts/connect/concurrency)). Streamlit's free hosting is documented [here](https://docs.streamlit.io/deploy/streamlit-community-cloud); resource limits and hibernation must be checked during deployment ([limits](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app)).
 

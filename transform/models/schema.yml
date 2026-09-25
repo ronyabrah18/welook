@@ -19,3 +19,20 @@ models:
           - accepted_values:
               arguments:
                 values: [tcp, udp]
+  - name: int_account_evidence
+    description: Domain-observation evidence with provider screening and transparent match rules.
+    columns:
+      - name: candidate_domain
+        data_tests: [not_null]
+      - name: source_record_id
+        data_tests: [not_null]
+  - name: fct_accounts
+    description: One row per candidate domain for sales research; not resolved legal entities.
+    columns:
+      - name: candidate_domain
+        data_tests: [not_null, unique]
+      - name: priority_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [investigate_first, research, low_evidence]

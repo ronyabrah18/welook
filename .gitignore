@@ -7,3 +7,4 @@ __pycache__/
 .DS_Store
 /transform/target/
 /transform/logs/
+/transform/.user.yml

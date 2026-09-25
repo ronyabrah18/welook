@@ -1,6 +1,6 @@
 # Sales intelligence prototype: planning draft
 
-Status: updated 25 September 2026 after full-data scope and US$10 API budget were confirmed. Target submission: 27 September 2026. This records design decisions, not completed features or validated sales outcomes. The [architecture](architecture.md) is the current implementation design and supersedes earlier sample-only serving assumptions.
+Status: updated 25 September 2026 after full-data ingestion and account modelling. Target submission: 27 September 2026. This records product hypotheses and implementation choices, not validated sales outcomes. The [architecture](architecture.md) tracks current implementation status.
 
 ## User and product hypothesis
 
@@ -72,7 +72,7 @@ No active scanning, automated email sending, CRM integration, model training, or
 
 Deliver a hosted app; source repo with skills, prompts, labelled evals and measured results; this planning document; architecture and cost documentation; a half-to-one-page development reflection. Optional walkthrough at most five minutes.
 
-Next: implement full-data streaming ingestion and schema validation, then review 10 diverse candidate-account evidence bundles to refine attribution/signal rules. The take-home API budget is US$10 total. Build the smallest end-to-end path, deploy early, and add evaluation and documentation alongside implementation. No paid calls have been made.
+Next: review diverse candidate-account evidence bundles and the draft eval labels, then run the measured v1/v2 comparison and deploy the app. The take-home API budget is US$10 total. No paid calls have been made.
 
 ## Data-platform emphasis
 

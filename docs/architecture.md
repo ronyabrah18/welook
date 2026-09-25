@@ -1,6 +1,6 @@
 # WeLook: system design
 
-**Design v1 · 25 September 2026.** This is the target architecture for the Firmable take-home, not a claim that the full system is already built. The full source has been profiled; the typed loader and first dbt tests currently run on a 5,000-record development sample. The full pipeline and hosted app are next.
+**Design v1 · 25 September 2026.** The full source has now been ingested and modelled locally, and the Streamlit app runs against the full-run serving export. Hosted deployment, manual eval-label review, and paid LLM measurement remain outstanding.
 
 ## What the salesperson gets
 
@@ -38,7 +38,7 @@ Python streams the Zstandard file line by line and writes bounded Parquet batche
 
 ### Incremental-load contract
 
-Treat each future arrival as an **immutable source file**. Register its checksum and source identifier first. If that file and the processing versions are already complete, skip it; if a retry failed, rebuild only its incomplete parts. Append new bronze parts, then validate and merge silver rows by source-file ID and line number. Keep a separate content fingerprint and duplicate mapping for observations repeated across files. Recompute gold rows for candidate accounts touched by the new evidence, invalidate their AI cache when the evidence hash changes, and publish a new complete serving snapshot. This makes repeated runs idempotent without requiring a streaming service or warehouse.
+Treat each future arrival as an **immutable source file**. Register its checksum and source identifier first. If that file and processing version are already complete, skip its ingestion. Append its new bronze/silver parts, then register all completed arrivals together. The prototype **rebuilds the derived dbt tables** from cumulative silver on a new arrival; the full build took about one minute for this snapshot. Only the affected accounts need AI reassessment because their evidence hashes change. A targeted gold refresh would be a later optimisation. This makes repeated source ingestion idempotent without requiring a streaming service or warehouse.
 
 The supplied data is one snapshot, so **initial delivery is a full load**. A later full replacement snapshot, correction, or deletion would need an explicit source contract and snapshot-diff/retraction logic; append-only arrivals alone cannot prove which old observations have disappeared. A small two-file fixture should demonstrate a first load, a repeated no-op, and a second file that updates one account without duplicating existing evidence.
 
@@ -46,7 +46,7 @@ The supplied data is one snapshot, so **initial delivery is a full load**. A lat
 
 Domains, hostnames, HTTP host/title, certificates, product names, provider organisation, ports, timestamps, and vulnerability metadata are **evidence**, not proof of company ownership. Candidate accounts begin with attributable domains; an account-observation link stores the match method and contradictions. A provider's IP or cloud region is not automatically the customer's asset or sales territory. Missing company size, sector, contacts, and location remain `unknown` unless sourced separately.
 
-Deterministic rules normalise and deduplicate observations, identify provider/shared-hosting patterns, derive technical signals, and calculate a transparent investigation tier. Initial signals can include verified or unverified dataset vulnerability associations, EOL labels, certificate-expiry evidence, and exposed administration interfaces where supported by more than a port number. Show the observation date, verification flag, and source evidence. Repeated scans cannot inflate a score; missing vulnerability metadata does not mean safe.
+Deterministic rules normalise and deduplicate observations, identify provider/shared-hosting patterns, derive technical signals, and calculate a transparent investigation tier. The implemented signals use dataset vulnerability associations with their `verified` flags, product context, and administration/login page titles. Other proposed signals, such as EOL and certificate expiry, remain future work. On the full account model, 222,307 account-observation links carry vulnerability labels, but only 1,335 carry a scanner-verified label; neither number is a count of confirmed affected companies. Show the observation date, verification flag, and source evidence. Repeated scans cannot inflate a score; missing vulnerability metadata does not mean safe.
 
 The queue uses three practical states: **investigate first** (relevant evidence and supported attribution), **research** (interesting evidence with unclear ownership or meaning), and **low evidence**. The score is an investigation aid, not a probability of purchase. The rep can filter by category, attribution, and date; infrastructure geography is labeled separately from sourced company territory.
 
@@ -69,7 +69,7 @@ Every model attempt writes a JSONL trace with request/evidence IDs, response, mo
 | Transformations | Small dbt-duckdb project | SQL models and data tests for the business logic; learn only what this pipeline needs. |
 | Runner | Sequential CLI with run manifests | One supplied snapshot does not need Airflow. |
 | App | Streamlit Community Cloud | Simple hosted, reviewer-accessible Python UI. Only the compact read-only serving file is deployed. |
-| CI | GitHub Actions on small fixtures | Catch code/model regressions without shipping raw data or spending API money. |
+| Checks | One-command local fixture and eval validation checks | Catch ingestion/eval regressions without shipping raw data or spending API money. CI can run the same commands later. |
 
 The app needs an account queue, evidence detail, research state, session shortlist, and CSV export. A session shortlist is temporary, so the UI must say so. The serving export contains explicit sanitized fields, snapshot date, pipeline counts, and AI coverage. Measure its actual file size, memory use, cold start, and reviewer access before submission. Keep the raw file, bronze/silver files, and model traces out of Git and hosting.
 
@@ -77,10 +77,9 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 
 ## Build order and proof of completion
 
-1. Stream the **full file** into bronze and silver; record validation, quarantine, reconciliation, runtime, and memory. Exercise the incremental contract with a two-file fixture and a repeated-run no-op.
-2. Build and inspect gold candidates/signals with dbt; manually review diverse real evidence cases.
-3. Export a compact serving snapshot and deploy the rule-based app early.
-4. Add the labelled eval, skill, versioned prompts, traced/budgeted AI assessment, and measured v1/v2 comparison.
-5. Verify the hosted workflow, GitHub repo, documentation, reflection, and reviewer access before submission.
+1. **Done:** stream the full file into bronze/silver, reconcile 11,768,718 rows, and exercise a two-file incremental fixture.
+2. **Done:** build and test 425,121 candidate domains with dbt, then export a 21.2 MB serving snapshot and run the Streamlit app locally.
+3. **Next:** manually review diverse real cases and the 25 draft eval labels, then measure v1/v2 with the traced, budgeted LLM workflow.
+4. **Next:** refresh the serving snapshot with selected AI decisions, deploy Streamlit, verify reviewer access, and finish reflection/results.
 
 The [planning document](planning.md) explains the sales use cases and desk research. [Detailed implementation notes](architecture-notes.md) record the schema, validation, recovery, cost, and deployment decisions behind this short design.
