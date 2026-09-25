@@ -1,6 +1,6 @@
 # WeLook: system design
 
-**Design v1 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/). A preliminary paid v1/v2 LLM eval is measured and published; reviewer invitations, manual label review, and publishing selected AI decisions to the app remain outstanding.
+**Design v1 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/). Reviewer invitations remain outstanding. The optional offline LLM workflow has no published decisions or quality evaluation.
 
 ## What the salesperson gets
 
@@ -60,11 +60,11 @@ The queue uses three practical states: **investigate first** (relevant evidence 
 
 The LLM assesses a **small, selected account-evidence bundle** where rules cannot confidently interpret attribution. Its structured result is `supported`, `needs_review`, or `insufficient_evidence`, with source observation IDs, a short reason, and the next research step. `Supported` means the supplied evidence supports the association; it is not external verification. Invalid references or schema failures go to review. Every other eligible account still appears with a rule-only status. No LLM call happens per raw row or app page view.
 
-The workflow is packaged as `skills/account-research/SKILL.md` with its trigger, input/output contract, dependent prompts, and worked example. Immutable prompt files in `prompts/` allow v1/v2 comparison. The 25 source-derived draft labels cover credible matches, provider confusion, shared platforms, missing data, and misleading vulnerability evidence; they still need human approval. The one-command eval reports per-class precision/recall, macro F1, evidence-reference validity, and output coverage for both versions and the held-out split. [Preliminary results](../evals/results/README.md) expose the weak `needs_review` recall rather than hiding it. A manual unsupported-claim audit is still needed before wider model use.
+The workflow is packaged as `skills/account-research/SKILL.md` with its trigger, input/output contract, dependent prompts, and worked example. Immutable prompt files in `prompts/` support future comparison. This repository does **not** include the requested hand-labelled eval set, one-command quality harness, or measured prompt-quality results. That is a known take-home gap. Until those checks and a manual unsupported-claim audit exist, AI outputs remain research suggestions and do not change outreach eligibility.
 
 Every model attempt writes a JSONL trace with request/evidence IDs, response, model, prompt/schema version, latency, token usage, calculated cost, validation outcome, and decision/error. Raw traces stay local; redacted examples and metrics can go in the repo. Cache results by evidence hash, prompt version, model, and schema version. Website and banner text are untrusted input, never instructions.
 
-**Spend ceiling: US$10 for the entire take-home**, including experiments, evals, retries, and production-like enrichment. An illustrative first pass is 1,100 calls on GPT-4.1 mini at 2,000 input/400 output tokens each: `1,100 × ((2,000 × $0.40 + 400 × $1.60) / 1,000,000) = $1.584`. Fifty difficult cases on GPT-4.1 at the same sizes add `$0.36`; a 25% retry allowance gives approximately **$2.43**. These are [published mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) and [GPT-4.1](https://developers.openai.com/api/docs/models/gpt-4.1) rates checked for this design, not charges incurred or a model-quality conclusion. Reserve worst-case tokens before each call and refuse work that would exceed the $10 ledger. Final model selection follows the eval and available API access.
+**Spend ceiling: US$10 for the entire take-home**, including experiments, retries, and any offline enrichment. An illustrative first pass is 1,100 calls on GPT-4.1 mini at 2,000 input/400 output tokens each: `1,100 × ((2,000 × $0.40 + 400 × $1.60) / 1,000,000) = $1.584`. Fifty difficult cases on GPT-4.1 at the same sizes add `$0.36`; a 25% retry allowance gives approximately **$2.43**. These are [published mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) and [GPT-4.1](https://developers.openai.com/api/docs/models/gpt-4.1) rates checked for this design, not charges incurred or a model-quality conclusion. Reserve worst-case tokens before each call and refuse work that would exceed the $10 ledger. Model quality remains unmeasured in the submitted repository.
 
 ## Why this stack and how it is hosted
 
@@ -75,7 +75,7 @@ Every model attempt writes a JSONL trace with request/evidence IDs, response, mo
 | Transformations | Small dbt-duckdb project | SQL models and data tests for the business logic; learn only what this pipeline needs. |
 | Runner | Sequential CLI with run manifests | One supplied snapshot does not need Airflow. |
 | App | Streamlit Community Cloud | Simple hosted, reviewer-accessible Python UI. Only the compact read-only serving file is deployed. |
-| Checks | One-command local fixture and eval validation checks | Catch ingestion/eval regressions without shipping raw data or spending API money. CI can run the same commands later. |
+| Checks | One-command local fixture and dbt data tests | Catch pipeline regressions without shipping raw data or spending API money. CI can run the same commands later. |
 
 The app needs an account queue, evidence detail, research state, session shortlist, and CSV export. A session shortlist is temporary, so the UI must say so. The serving export contains explicit sanitized fields, snapshot date, pipeline counts, and AI coverage. Measure its actual file size, memory use, cold start, and reviewer access before submission. Keep the raw file, bronze/silver files, and model traces out of Git and hosting.
 
@@ -85,7 +85,7 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 
 1. **Done:** stream the full file into bronze/silver, reconcile 11,768,718 rows, and exercise a two-file incremental fixture.
 2. **Done:** build and test 425,121 candidate domains with dbt, then export a 21.2 MB serving snapshot and run the Streamlit app locally.
-3. **Partly done:** the traced, budgeted v1/v2 comparison is published with preliminary metrics. Next, manually approve or correct the 25 draft labels and rerun the cached comparison.
-4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, refresh the serving snapshot with selected AI decisions and invite reviewers.
+3. **Partly done:** the traced, budgeted offline AI adapter exists, but it has no submitted labelled evaluation or published app decisions.
+4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, invite reviewers and verify their access.
 
 The [planning document](planning.md) explains the sales use cases and desk research. [Detailed implementation notes](architecture-notes.md) record the schema, validation, recovery, cost, and deployment decisions behind this short design.

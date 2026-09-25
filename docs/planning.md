@@ -49,18 +49,17 @@ Rules handle parsing, domain normalisation, provider/platform screening, observa
 
 Proposed core LLM feature: interpret a compact evidence bundle and return a structured account research brief: evidence assessment (`supported`, `needs_review`, or `insufficient_evidence`), referenced observation IDs, a short explanation, and the next research action. Supported means supported by supplied evidence, not independently verified ownership or security status. Rules constrain progression to outreach review; the LLM does not override unresolved ownership.
 
-Prefer one well-evaluated LLM feature for the deadline. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is optional.
+The offline LLM feature remains advisory because no labelled quality evaluation is submitted. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
 
-## AI engineering acceptance criteria
+## AI workflow scope and gap
 
 - A versioned `skills/account-research/SKILL.md` with triggers, input/output contract, prompt dependencies, and example invocation.
-- Prompt files for v1 and v2, with actual measured comparisons rather than invented improvements.
-- 25 human-reviewed evidence bundles with expected class, acceptable evidence IDs, and rationale. Include hosting-provider confusion, shared platforms, generic certificate fields, missing fields, unverified vulnerability associations, and credible domain matches.
-- Keep a fixed held-out portion; do not tune prompts on its labels. Report class precision/recall, macro F1, evidence-reference validity, and unsupported-claim failures. Small-set uncertainty must be documented.
-- One command to run the same cases across prompt versions and save per-case predictions, errors, aggregate metrics, and the comparison.
+- Prompt files for v1 and v2, retained for traceability; no claim that v2 is better without a published comparison.
 - Each LLM call logs request, response, model, prompt version, latency, token usage, calculated cost, decision, errors, and evidence references. Treat website text as untrusted data, never instructions.
 - Cache results by evidence hash, prompt version, and model. Call the LLM for shortlisted accounts, not all 11.8 million observations.
-- Cost model: calls = new/changed accounts per run × runs per month; cost = calls × (input tokens × input price + output tokens × output price) / 1,000,000. Include retry and evaluation budgets. Record current model prices and an explicit enforceable spend ceiling after budget/model selection.
+- Cost model: calls = new/changed accounts per run × runs per month; cost = calls × (input tokens × input price + output tokens × output price) / 1,000,000. Include retry budgets and enforce a spend ceiling.
+
+The take-home explicitly requests 20–30 hand-labelled examples, a one-command eval harness, and measured quality. Those items are **not delivered** in this version. Without them, LLM output cannot be presented as quality-validated, so the hosted app does not use it to authorise outreach.
 
 ## Scope and limitations
 
@@ -70,10 +69,10 @@ No active scanning, automated email sending, CRM integration, model training, or
 
 ## Delivery and next decisions
 
-Deliver a hosted app; source repo with skills, prompts, labelled evals and measured results; this planning document; architecture and cost documentation; a half-to-one-page development reflection. Optional walkthrough at most five minutes.
+The submitted scope is a hosted app; source repo with a skill and prompts; this planning document; architecture and cost documentation; and a half-to-one-page development reflection. The requested labelled eval deliverable is missing. Optional walkthrough at most five minutes.
 
-Next: approve or correct the draft eval labels, rerun the cached v1/v2 comparison if labels change, and publish a cautiously selected set of AI assessments to the already deployed app. The take-home API ceiling is US$10 total; the preliminary comparison used US$0.013798 according to the local ledger.
+Next: verify reviewer access to the already deployed app. Any future AI publication should first add reviewed examples and a measured quality gate. The take-home API ceiling is US$10 total; earlier offline experiments used US$0.013798 according to the local ledger, but their evaluation artifacts are not part of this submission.
 
 ## Data-platform emphasis
 
-The Senior Data Engineer — Data Platform role emphasises LLM extraction, enrichment, entity resolution, semantic validation, and regression gates within pipelines. Implement the evidence assessment as a cached pipeline enrichment/validation step; the UI consumes its structured results. An account narrative can be derived from that output. Prioritise typed models, provenance, quality checks, recoverable stages, and measured AI behaviour over extra UI features.
+The Senior Data Engineer — Data Platform role emphasises LLM extraction, enrichment, entity resolution, semantic validation, and regression gates within pipelines. The current submission demonstrates typed models, provenance, quality checks, and recoverable stages. Its offline AI adapter is not a validated production enrichment step; adding reviewed examples and measured regression gates would be required before relying on it.

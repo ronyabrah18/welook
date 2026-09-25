@@ -16,7 +16,7 @@ import duckdb
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from evals.llm_client import BudgetedAssessor  # noqa: E402
+from welook.llm_client import BudgetedAssessor  # noqa: E402
 
 
 def selected_bundles(db: Path, limit: int) -> list[dict]:

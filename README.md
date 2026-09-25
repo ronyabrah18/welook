@@ -13,11 +13,11 @@ flowchart LR
   C --> D["Rules and source-linked evidence<br/>investigation tiers"]
   D --> E["Read-only serving snapshot<br/>50,000 ranked candidates"]
   E --> F["Private Streamlit app<br/>research, shortlist, CSV"]
-  D -. "selected uncertain cases" .-> G["Offline AI assessment<br/>versioned prompts, evals, traces"]
+  D -. "selected uncertain cases" .-> G["Offline AI assessment<br/>versioned prompts and traces"]
   G -. "publish reviewed decisions" .-> E
 ```
 
-The solid path is running end to end. The AI workflow has been measured offline; publishing selected, reviewed decisions into the app is the next step. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
+The solid path is running end to end. The optional AI workflow is offline; no AI assessments are in the hosted snapshot yet. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
 
 ## What has been built
 
@@ -25,7 +25,7 @@ The solid path is running end to end. The AI workflow has been measured offline;
 - Built 9,335,329 domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. All 14 dbt model/test steps passed on the full run.
 - Exported a 21.2 MB read-only serving snapshot with the top 50,000 candidates and 96,113 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
 - Deployed the Streamlit account queue, research queue, evidence detail, session shortlist, and CSV export; verified the hosted app starts against the full serving snapshot.
-- Added a reusable account-research skill, two prompt versions, a 25-case **draft** labelled set, a one-command eval, and budgeted/traced offline API code. [Preliminary measured results](evals/results/README.md) compare both prompts; the labels still need manual review before these scores are treated as final.
+- Added a reusable account-research skill, two prompt versions, and budgeted/traced offline API code. A labelled evaluation set and prompt-quality results are **not included**, so the AI assessment is not presented as validated.
 
 The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
 
@@ -47,18 +47,15 @@ The repo also includes an earlier 5,000-row development loader in `scripts/load_
 
 ```bash
 uv run python -m unittest discover -s tests -v
-uv run python evals/run_eval.py
 ```
 
-The second command validates eval cases without API calls. After reviewing [the draft labels](evals/label_review.md), copy `.env.example` to the ignored `.env` and set `OPENAI_API_KEY` locally. With API billing and permission to spend within the US$10 ceiling, `uv run python evals/run_eval.py --live` measures both prompt versions and reuses cached calls. `uv run python scripts/enrich_accounts.py --limit 100` previews selected ambiguous accounts for free; `--live` performs offline assessments. Re-export the serving snapshot afterward to display cached decisions in the app. API billing is separate from a ChatGPT/Codex subscription.
+The optional AI workflow selects ambiguous accounts offline. `uv run python scripts/enrich_accounts.py --limit 100` previews selected evidence bundles without an API call. After setting `OPENAI_API_KEY` in the ignored `.env`, `--live` makes budgeted calls and writes local traces. Outputs require manual verification before use; no labelled quality evaluation is supplied. Publishing cached decisions in the app would require a quality review first. API billing is separate from a ChatGPT/Codex subscription.
 
 ## Submission documents
 
-The [eval review cards](evals/review_cards.md) show the exact evidence behind each proposed label so a reviewer can approve or correct the set before measuring model quality.
-
 - [Planning and sales use cases](docs/planning.md)
 - [System architecture](docs/architecture.md) and [detailed engineering notes](docs/architecture-notes.md)
-- [Skill](skills/account-research/SKILL.md), [prompts](prompts/account-research/), and [evals](evals/)
+- [Skill](skills/account-research/SKILL.md) and [prompts](prompts/account-research/)
 - [How I built it reflection](docs/how-i-built.md)
 
 The candidate domain is an evidence grouping key, not a resolved legal entity. Shared platforms, CDN infrastructure, scanner labels, and missing firmographics remain visible limitations.

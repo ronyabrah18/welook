@@ -2,7 +2,7 @@
 
 Design v1 · 25 September 2026 · target submission 27 September 2026
 
-**Status:** detailed design and implementation notes. Full bronze/silver ingestion, account models, and a local Streamlit app are complete. Hosting and measured LLM evaluation remain to finish. See the [short architecture](architecture.md) and README for current counts.
+**Status:** detailed design and implementation notes. Full bronze/silver ingestion, account models, and hosted Streamlit are complete. No labelled LLM quality evaluation is included. See the [short architecture](architecture.md) and README for current counts.
 
 ## 1. Product and scope
 
@@ -30,7 +30,7 @@ flowchart TB
     E --> M[One offline LLM workflow<br/>Structured assessment and abstention]
     M --> C[Versioned decision cache]
     M --> T[Call traces and budget ledger]
-    P[Versioned skill and prompts<br/>25 human-labelled eval cases] -. gates .-> M
+    P[Versioned skill and prompts] -. informs .-> M
     R --> G[Gold account and evidence marts]
     C --> G
     G --> X[Validate and export serving snapshot]
@@ -71,7 +71,7 @@ The separate [editable diagram](diagrams/welook-architecture.mmd) contains the s
 | AI | One provider adapter + structured output validation | Selective evidence interpretation; prompts, results, and costs versioned. |
 | Interface | Streamlit | Python app with native tables, filters, detail views, and download buttons. |
 | Hosting | Streamlit Community Cloud, subject to deployment checks | Free hosting with public/private GitHub integration. Only app dependencies and serving data ship. |
-| Checks | Local one-command fixture and eval validation checks | CI can run these later; no full dataset or paid calls are needed for routine checks. |
+| Checks | Local one-command fixture and dbt data tests | CI can run these later; no full dataset or paid calls are needed for routine checks. |
 
 PyArrow supports Parquet/Zstd writing ([documentation](https://arrow.apache.org/docs/python/parquet.html)). DuckDB's file access model motivates separate batch-build and read-only serving files ([concurrency documentation](https://duckdb.org/docs/lts/connect/concurrency)). Streamlit's free hosting is documented [here](https://docs.streamlit.io/deploy/streamlit-community-cloud); resource limits and hibernation must be checked during deployment ([limits](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app)).
 
@@ -143,39 +143,37 @@ Input: candidate domain, selected observation IDs, compact title/certificate/pro
 
 Run offline on selected candidates with useful technical evidence. Initial capacity target: up to 1,000 unique bundles, with actual coverage reported. Cache key includes evidence hash, prompt hash/version, model snapshot, and output-schema version. A candidate outside the AI quota remains rule-only; it is not dropped from the account universe.
 
-Cheap model first; bounded stronger-model retry only if the cheap model fails on adequate but ambiguous evidence and evaluation justifies the escalation. Missing evidence goes to human research. Transport retries use backoff and a fixed attempt cap. Refusals, invalid outputs, timeouts, exhausted budget, and terminal failures get distinct statuses. No failed result disappears silently.
+Cheap model first; a stronger model would require a future quality evaluation before use. Missing evidence goes to human research. Refusals, invalid outputs, timeouts, exhausted budget, and terminal failures get distinct statuses. No failed result disappears silently.
 
-## 8. Evals, traces, skills, and spending
+## 8. AI traces, skills, and spending
 
 Create a versioned `skills/account-research/SKILL.md` with trigger, contract, prompt dependencies, and example. Keep immutable `prompts/account-research/v1.md` and `v2.md`; create versions as actual iteration occurs.
 
-Hand-label 25 evidence bundles: credible accounts, provider-only observations, shared platforms, generic certificate fields, conflicting names, missing fields, and unverified vulnerability associations. Keep 15 development cases and 10 held-out cases, split by candidate/domain to avoid leakage. Expected class labels describe supplied-evidence sufficiency, not ground-truth asset ownership. Record label rationale and uncertainty.
+The requested hand-labelled examples, one-command comparison harness, and measured quality results are not included. This is a known gap against the take-home requirements. Until an evaluation is added, outputs remain advisory and cannot promote an account to outreach-ready status.
 
-One eval command runs named versions over the same cases, saves predictions and metrics, and compares to a baseline. Report per-class precision/recall, macro F1, response coverage, evidence-ID validity, abstentions, and unsupported-claim failures. Missing predictions reduce end-to-end coverage and recall where applicable; never report accuracy on successful outputs alone without coverage. Provisional release checks: supported-class precision at least 90%, valid evidence references for all accepted outputs, and zero observed unsupported critical claims on the small release set. Report actual results and small denominators; these targets are not measured achievements. If they fail, require human review instead of claiming success.
+Every call logs request/response (selected, sanitised evidence), request/attempt IDs, model snapshot, prompt hash/version, timestamps, latency, token usage, rate-card version, cost, decision, schema-validation result, error, and cache key. Append JSONL traces; use a local transactional budget ledger for reservations. Raw traces remain local/ignored.
 
-Every call logs request/response (selected, sanitised evidence), request/attempt IDs, model snapshot, prompt hash/version, timestamps, latency, token usage, rate-card version, cost, decision, schema-validation result, error, and cache key. Append JSONL traces; use a local transactional budget ledger for reservations. Raw traces remain local/ignored; commit redacted example traces and aggregate metrics.
-
-**User-selected take-home API ceiling: US$10 total**, including retries, evaluations, development, and enrichment. Billing/access setup remains pending. Candidate rates checked 25 September 2026:
+**User-selected take-home API ceiling: US$10 total**, including retries, development, and any enrichment. Candidate rates checked 25 September 2026:
 
 | Candidate model | Input / 1M tokens | Output / 1M tokens | Intended use |
 | --- | ---: | ---: | --- |
-| GPT-4.1 mini | $0.40 | $1.60 | First evaluated structured classifier |
-| GPT-4.1 | $2.00 | $8.00 | Optional bounded difficult-case comparison |
+| GPT-4.1 mini | $0.40 | $1.60 | Experimental structured classifier |
+| GPT-4.1 | $2.00 | $8.00 | Possible future comparison |
 
-Sources: [mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini), [stronger model](https://developers.openai.com/api/docs/models/gpt-4.1). These are candidate models, not a claim of best performance; select based on our evaluation and available account access. Pin a supported snapshot on implementation. No provider-cache or batch discounts assumed.
+Sources: [mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini), [stronger model](https://developers.openai.com/api/docs/models/gpt-4.1). These are candidate models, not a claim of best performance. No provider-cache or batch discounts assumed.
 
 Illustrative workload at 2,000 total input tokens and 400 output tokens per call:
 
 ```text
 mini: (2,000 × $0.40 + 400 × $1.60) / 1,000,000 = $0.00144/call
-1,000 enrichment calls + 100 eval/development calls = $1.584
+1,100 development or enrichment calls = $1.584
 50 stronger-model calls × $0.0072 = $0.360
 Base estimate = $1.944; with 25% retry allowance = $2.430
 ```
 
 This is an estimate, not a bill. Configure 2,500 input / 500 output token caps and reserve worst-case cost before dispatch; retain the reservation when a timeout leaves usage unknown. At those caps the same 1,150-call workload is $2.43 before retry allowance. Refuse a new request if completed plus reserved spending would exceed $10. All invocations share the persistent ledger. Changing models also requires an updated rate card.
 
-Production illustration: 1,000 changed/new bundles per day × 30 days × $0.00144 = $43.20 monthly for mini calls alone. An initial $50/month limit would require deferring work when evaluations, escalations, or retries exhaust it. It is a proposed limit, not an estimate of the company's workload. Most importantly, no LLM is called per raw service record or app page view.
+Production illustration: 1,000 changed/new bundles per day × 30 days × $0.00144 = $43.20 monthly for mini calls alone. An initial $50/month limit would require deferring work when calls or retries exhaust it. It is a proposed limit, not an estimate of the company's workload. Most importantly, no LLM is called per raw service record or app page view.
 
 ## 9. Serving and hosting
 
@@ -204,10 +202,10 @@ Production mapping: S3 for immutable data and manifests; Batch/ECS for Python st
 1. **Full ingestion:** implement generator, faithful bronze, typed silver, quarantine, manifests, and bounded writes. Test fixtures/sample; run the full file and reconcile all 11,768,718 records.
 2. **Account pipeline:** implement a small dbt graph for deduplication, candidate/evidence links, signals, and transparent priority. Review ten diverse real cases manually.
 3. **Early app:** export rule-derived accounts and deploy filters, detail, shortlist, and CSV download. Clearly mark AI pending during development.
-4. **AI and measurement:** human labels, skill, prompt v1, trace/budget wrapper, evaluation, actual v2 comparison, cached enrichment, and refreshed serving artifact.
+4. **Optional AI:** skill, versioned prompts, trace/budget wrapper, and cached enrichment adapter exist; no labelled quality evaluation or published app decisions are included.
 5. **Submission:** test hosted flow, freeze versions, record actual counts/cost/performance, finish reflection and architecture status, check reviewer access, optional short walkthrough.
 
-Aim to complete the full-data foundation and first app on Friday, AI/evals and deployment verification on Saturday, and final checks/documentation on Sunday. Cut optional feeds and UI embellishments before cutting evaluations or the working app. The above schedule is a target, not a guarantee.
+The full-data foundation and hosted app are complete. Reviewer access remains to be checked. The missing labelled evaluation is an explicit submission limitation.
 
 ## 12. Decisions and acknowledged limits
 
@@ -215,4 +213,4 @@ Aim to complete the full-data foundation and first app on Friday, AI/evals and d
 - WeLook preserves verification metadata and separates account attribution from infrastructure identity.
 - No Kubernetes, Spark cluster, vector database, orchestration server, paid warehouse, or separate API service is needed for this one-file prototype.
 - Evidence is observational and potentially stale. The source spans about 76 minutes on one date; no historical growth, newly exposed condition, or confirmed buying intent can be derived from it.
-- Read-only hosting, partial contact/firmographic coverage, uncertain ownership, and a small evaluation set are explicit limitations, not hidden assumptions.
+- Read-only hosting, partial contact/firmographic coverage, uncertain ownership, and absent LLM quality evaluation are explicit limitations, not hidden assumptions.

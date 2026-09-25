@@ -13,7 +13,7 @@ flowchart TB
     E --> M[One offline LLM workflow<br/>Structured assessment and abstention]
     M --> C[Versioned decision cache]
     M --> T[Call traces and budget ledger]
-    P[Versioned skill and prompts<br/>25 draft eval labels awaiting human review] -. gates .-> M
+    P[Versioned skill and prompts] -. informs .-> M
     R --> G[Gold account and evidence marts]
     C --> G
     G --> X[Validate and export serving snapshot]
