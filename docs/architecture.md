@@ -1,6 +1,6 @@
 # WeLook: system design
 
-**Design v1 · 25 September 2026.** The full source has now been ingested and modelled locally, and the Streamlit app runs against the full-run serving export. Hosted deployment, manual eval-label review, and paid LLM measurement remain outstanding.
+**Design v1 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/); reviewer invitations, manual eval-label review, and paid LLM measurement remain outstanding.
 
 ## What the salesperson gets
 
@@ -80,6 +80,6 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 1. **Done:** stream the full file into bronze/silver, reconcile 11,768,718 rows, and exercise a two-file incremental fixture.
 2. **Done:** build and test 425,121 candidate domains with dbt, then export a 21.2 MB serving snapshot and run the Streamlit app locally.
 3. **Next:** manually review diverse real cases and the 25 draft eval labels, then measure v1/v2 with the traced, budgeted LLM workflow.
-4. **Next:** refresh the serving snapshot with selected AI decisions, deploy Streamlit, verify reviewer access, and finish reflection/results.
+4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, refresh the serving snapshot with selected AI decisions, invite reviewers, and publish measured eval results.
 
 The [planning document](planning.md) explains the sales use cases and desk research. [Detailed implementation notes](architecture-notes.md) record the schema, validation, recovery, cost, and deployment decisions behind this short design.

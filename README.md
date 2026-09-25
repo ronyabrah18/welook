@@ -2,14 +2,14 @@
 
 WeLook turns the supplied internet-service observations into an evidence-backed prospect queue for a team selling external attack-surface monitoring. Reps can filter candidate domains, inspect why an account appears, move uncertain cases to research, save a session shortlist, and export a CSV brief. Technical observations are leads for investigation, not confirmed vulnerabilities or buying intent.
 
-**Hosted app:** deployment pending. The app runs locally from the committed serving snapshot.
+**Hosted app:** [welook.streamlit.app](https://welook.streamlit.app/). The app is deployed from `main` and currently private; Firmable reviewers need a Streamlit viewer invitation. The app also runs locally from the committed serving snapshot.
 
 ## What has been built
 
 - Streamed the **entire 12.44 GB compressed source** into faithful bronze and typed silver Parquet: 11,768,718 source, bronze, and accepted silver rows; zero rejected rows; 656 bounded parts; 8.2-minute ingestion on a 48 GB laptop.
 - Built 9,335,329 domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. All 14 dbt model/test steps passed on the full run.
 - Exported a 21.2 MB read-only serving snapshot with the top 50,000 candidates and 96,113 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
-- Implemented a local Streamlit account queue, research queue, evidence detail, session shortlist, and CSV export; verified it starts against the full serving snapshot.
+- Deployed the Streamlit account queue, research queue, evidence detail, session shortlist, and CSV export; verified the hosted app starts against the full serving snapshot.
 - Added a reusable account-research skill, two prompt versions, a 25-case **draft** labelled set, a no-cost eval dry run, and budgeted/traced offline API code. The labels still need manual review; no paid API calls or measured LLM scores have been made yet.
 
 The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
