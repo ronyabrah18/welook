@@ -77,16 +77,20 @@ def main():
     args = parser.parse_args()
     cases = load_cases(args.cases)
     counts = Counter(case["expected"] for case in cases)
+    review_counts = Counter(case.get("review_status", "unknown") for case in cases)
     if not args.live:
         print(json.dumps({"mode": "dry_run_no_api_calls", "cases": len(cases),
                           "split_counts": dict(Counter(c["split"] for c in cases)),
-                          "label_counts": dict(counts)}, indent=2))
+                          "label_counts": dict(counts),
+                          "label_review_status": dict(review_counts)}, indent=2))
         return
     assessor = BudgetedAssessor()
     versions = ["v1", "v2"] if args.prompt == "both" else [args.prompt]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report = {"at_utc": datetime.now(timezone.utc).isoformat(), "model": assessor.model,
-              "case_count": len(cases), "versions": {}}
+              "case_count": len(cases), "label_review_status": dict(review_counts),
+              "provisional": any(case.get("review_status") != "reviewed" for case in cases),
+              "versions": {}}
     for version in versions:
         predictions = []
         for index, case in enumerate(cases, 1):

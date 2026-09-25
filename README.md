@@ -10,7 +10,7 @@ WeLook turns the supplied internet-service observations into an evidence-backed 
 - Built 9,335,329 domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. All 14 dbt model/test steps passed on the full run.
 - Exported a 21.2 MB read-only serving snapshot with the top 50,000 candidates and 96,113 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
 - Deployed the Streamlit account queue, research queue, evidence detail, session shortlist, and CSV export; verified the hosted app starts against the full serving snapshot.
-- Added a reusable account-research skill, two prompt versions, a 25-case **draft** labelled set, a no-cost eval dry run, and budgeted/traced offline API code. The labels still need manual review; no paid API calls or measured LLM scores have been made yet.
+- Added a reusable account-research skill, two prompt versions, a 25-case **draft** labelled set, a one-command eval, and budgeted/traced offline API code. [Preliminary measured results](evals/results/README.md) compare both prompts; the labels still need manual review before these scores are treated as final.
 
 The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
 
@@ -35,7 +35,7 @@ uv run python -m unittest discover -s tests -v
 uv run python evals/run_eval.py
 ```
 
-The second command validates eval cases without API calls. After reviewing [the draft labels](evals/label_review.md), copy `.env.example` to the ignored `.env` and set `OPENAI_API_KEY` locally. Once API billing and a spend decision within the US$10 ceiling are ready, `uv run python evals/run_eval.py --live` measures both prompt versions. `uv run python scripts/enrich_accounts.py --limit 100` previews selected ambiguous accounts for free; `--live` performs offline assessments. Re-export the serving snapshot afterward to display cached decisions in the app. API billing is separate from a ChatGPT/Codex subscription.
+The second command validates eval cases without API calls. After reviewing [the draft labels](evals/label_review.md), copy `.env.example` to the ignored `.env` and set `OPENAI_API_KEY` locally. With API billing and permission to spend within the US$10 ceiling, `uv run python evals/run_eval.py --live` measures both prompt versions and reuses cached calls. `uv run python scripts/enrich_accounts.py --limit 100` previews selected ambiguous accounts for free; `--live` performs offline assessments. Re-export the serving snapshot afterward to display cached decisions in the app. API billing is separate from a ChatGPT/Codex subscription.
 
 ## Submission documents
 

@@ -1,6 +1,6 @@
 # WeLook: system design
 
-**Design v1 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/); reviewer invitations, manual eval-label review, and paid LLM measurement remain outstanding.
+**Design v1 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/). A preliminary paid v1/v2 LLM eval is measured and published; reviewer invitations, manual label review, and publishing selected AI decisions to the app remain outstanding.
 
 ## What the salesperson gets
 
@@ -54,7 +54,7 @@ The queue uses three practical states: **investigate first** (relevant evidence 
 
 The LLM assesses a **small, selected account-evidence bundle** where rules cannot confidently interpret attribution. Its structured result is `supported`, `needs_review`, or `insufficient_evidence`, with source observation IDs, a short reason, and the next research step. `Supported` means the supplied evidence supports the association; it is not external verification. Invalid references or schema failures go to review. Every other eligible account still appears with a rule-only status. No LLM call happens per raw row or app page view.
 
-This workflow will be packaged as `skills/account-research/SKILL.md` with its trigger, input/output contract, dependent prompts, and worked example. Immutable prompt files in `prompts/` allow v1/v2 comparison. A 25-case human-labelled set will cover credible matches, provider confusion, shared platforms, missing data, and misleading vulnerability evidence. The one-command eval will report per-class precision/recall, macro F1, evidence-reference validity, unsupported claims, and output coverage versus the previous prompt version. We will publish **actual measured results**, including failures, rather than claiming an improvement before testing.
+The workflow is packaged as `skills/account-research/SKILL.md` with its trigger, input/output contract, dependent prompts, and worked example. Immutable prompt files in `prompts/` allow v1/v2 comparison. The 25 source-derived draft labels cover credible matches, provider confusion, shared platforms, missing data, and misleading vulnerability evidence; they still need human approval. The one-command eval reports per-class precision/recall, macro F1, evidence-reference validity, and output coverage for both versions and the held-out split. [Preliminary results](../evals/results/README.md) expose the weak `needs_review` recall rather than hiding it. A manual unsupported-claim audit is still needed before wider model use.
 
 Every model attempt writes a JSONL trace with request/evidence IDs, response, model, prompt/schema version, latency, token usage, calculated cost, validation outcome, and decision/error. Raw traces stay local; redacted examples and metrics can go in the repo. Cache results by evidence hash, prompt version, model, and schema version. Website and banner text are untrusted input, never instructions.
 
@@ -79,7 +79,7 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 
 1. **Done:** stream the full file into bronze/silver, reconcile 11,768,718 rows, and exercise a two-file incremental fixture.
 2. **Done:** build and test 425,121 candidate domains with dbt, then export a 21.2 MB serving snapshot and run the Streamlit app locally.
-3. **Next:** manually review diverse real cases and the 25 draft eval labels, then measure v1/v2 with the traced, budgeted LLM workflow.
-4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, refresh the serving snapshot with selected AI decisions, invite reviewers, and publish measured eval results.
+3. **Partly done:** the traced, budgeted v1/v2 comparison is published with preliminary metrics. Next, manually approve or correct the 25 draft labels and rerun the cached comparison.
+4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, refresh the serving snapshot with selected AI decisions and invite reviewers.
 
 The [planning document](planning.md) explains the sales use cases and desk research. [Detailed implementation notes](architecture-notes.md) record the schema, validation, recovery, cost, and deployment decisions behind this short design.

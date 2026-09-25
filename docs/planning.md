@@ -72,7 +72,7 @@ No active scanning, automated email sending, CRM integration, model training, or
 
 Deliver a hosted app; source repo with skills, prompts, labelled evals and measured results; this planning document; architecture and cost documentation; a half-to-one-page development reflection. Optional walkthrough at most five minutes.
 
-Next: review diverse candidate-account evidence bundles and the draft eval labels, then run the measured v1/v2 comparison and deploy the app. The take-home API budget is US$10 total. No paid calls have been made.
+Next: approve or correct the draft eval labels, rerun the cached v1/v2 comparison if labels change, and publish a cautiously selected set of AI assessments to the already deployed app. The take-home API ceiling is US$10 total; the preliminary comparison used US$0.013798 according to the local ledger.
 
 ## Data-platform emphasis
 

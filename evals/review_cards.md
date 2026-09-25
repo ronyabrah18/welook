@@ -1,8 +1,8 @@
 # Eval review cards
 
-Review the proposed class for each real-data case. This is about whether the candidate domain is associated with the observed service, **not** whether a vulnerability is confirmed, the company owns the IP, or it intends to buy.
+Review the proposed class for each real-data case. The sales question is whether the observation supports linking a **specific prospective business** to a service; a shared provider or tenant-platform domain alone may not identify that business. This is **not** a judgement that a vulnerability is confirmed, the business owns the IP, or it intends to buy.
 
-- `supported`: host/certificate evidence supports a service-to-domain association.
+- `supported`: specific host/certificate evidence supports a plausible business-to-service association, subject to human verification.
 - `needs_review`: there is a clue, but shared infrastructure, a conflict, or a missing ownership link needs research.
 - `insufficient_evidence`: the observation does not meaningfully link the service to the candidate.
 
@@ -195,6 +195,7 @@ The cases are split into development and held-out sets. Please review the propos
 - HTTP host: `107.154.123.136`; certificate: `imperva.com`
 - Page title: missing
 - Infrastructure organisation: Incapsula Inc; product: missing
+- Source DNS list includes `switchcraft.com` and `www.switchcraft.com` alongside several unrelated domains on the shared CDN observation.
 - Dataset vulnerability labels: 0 (association count, not a verified finding)
 - Rule flags: HTTP match `False`; certificate match `False`; known provider domain `False`
 - Source evidence ID: `source-line-7127446`
