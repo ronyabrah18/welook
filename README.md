@@ -4,6 +4,21 @@ WeLook turns the supplied internet-service observations into an evidence-backed 
 
 **Hosted app:** [welook.streamlit.app](https://welook.streamlit.app/). The app is deployed from `main` and currently private; Firmable reviewers need a Streamlit viewer invitation. The app also runs locally from the committed serving snapshot.
 
+## How it works
+
+```mermaid
+flowchart LR
+  A["Supplied JSONL.zst<br/>12.44 GB"] --> B["Streamed Python load<br/>bronze and silver Parquet"]
+  B --> C["DuckDB + dbt<br/>425,121 candidate domains"]
+  C --> D["Rules and source-linked evidence<br/>investigation tiers"]
+  D --> E["Read-only serving snapshot<br/>50,000 ranked candidates"]
+  E --> F["Private Streamlit app<br/>research, shortlist, CSV"]
+  D -. "selected uncertain cases" .-> G["Offline AI assessment<br/>versioned prompts, evals, traces"]
+  G -. "publish reviewed decisions" .-> E
+```
+
+The solid path is running end to end. The AI workflow has been measured offline; publishing selected, reviewed decisions into the app is the next step. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
+
 ## What has been built
 
 - Streamed the **entire 12.44 GB compressed source** into faithful bronze and typed silver Parquet: 11,768,718 source, bronze, and accepted silver rows; zero rejected rows; 656 bounded parts; 8.2-minute ingestion on a 48 GB laptop.
