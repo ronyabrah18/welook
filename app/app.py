@@ -145,8 +145,10 @@ with prospects:
                      "before looking for a contact. Keep this in the research queue until attribution is clear.")
         if len(assessment):
             ai = assessment.iloc[0]
-            st.info(f"AI evidence assessment ({ai.prompt_version}, {ai.model}): "
+            st.info(f"AI research suggestion ({ai.prompt_version}, {ai.model}): "
                     f"{ai.decision}. {ai.reason} Next: {ai.next_action}")
+            st.caption("This suggestion does not change the rule-derived priority or clear the account for outreach. "
+                       "Verify the service operator and any technical claim independently.")
         if row.example_http_title:
             st.write(f"**Example page title:** {row.example_http_title}")
         if row.example_product:
