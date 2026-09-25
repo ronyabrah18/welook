@@ -34,8 +34,6 @@ uv run streamlit run app/app.py
 
 The pipeline registers immutable source-file checksums. A repeated completed file is skipped at ingestion; adding a second file appends its silver parts to the registered source and refreshes the derived dbt tables and serving snapshot. A two-file/retry fixture exercises this behavior. A replacement snapshot or deletion requires a separate source contract.
 
-The repo also includes an earlier 5,000-row development loader in `scripts/load_sample.py`; it is not the full pipeline.
-
 ## Checks and AI workflow
 
 ```bash
@@ -47,7 +45,7 @@ The optional AI workflow selects ambiguous accounts offline. `uv run python scri
 ## Submission documents
 
 - [Planning and sales use cases](docs/planning.md)
-- [System architecture](docs/architecture.md) and [detailed engineering notes](docs/architecture-notes.md)
+- [System architecture](docs/architecture.md)
 - [Skill](skills/account-research/SKILL.md) and [prompts](prompts/account-research/)
 - [How I built it reflection](docs/how-i-built.md)
 

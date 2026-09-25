@@ -90,4 +90,4 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 3. **Partly done:** the traced, budgeted offline AI adapter exists, but it has no submitted labelled evaluation or published app decisions.
 4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, invite reviewers and verify their access.
 
-The [planning document](planning.md) explains the sales use cases and desk research. [Detailed implementation notes](architecture-notes.md) record the schema, validation, recovery, cost, and deployment decisions behind this short design.
+The [planning document](planning.md) explains the sales use cases and desk research.
