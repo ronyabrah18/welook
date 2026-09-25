@@ -134,6 +134,15 @@ with prospects:
         b.metric("Attribution", row.attribution_status)
         c.metric("Observed services", f"{int(row.observation_count):,}")
         st.write(f"**Suggested next step:** {row.next_action}")
+        st.write("**Who to reach:** An IT or security owner is the working buyer role; "
+                 "the dataset has no named contact or verified contact route.")
+        if row.attribution_status == "supported" and row.priority_tier == "investigate_first":
+            st.write("**Outreach preparation:** First confirm the business operates this service through "
+                     "its official site or an approved account record. Then find the relevant IT/security "
+                     "contact and ask about external-asset visibility. Do not assert a breach or vulnerability.")
+        else:
+            st.write("**Outreach preparation:** Resolve the service operator and business identity "
+                     "before looking for a contact. Keep this in the research queue until attribution is clear.")
         if len(assessment):
             ai = assessment.iloc[0]
             st.info(f"AI evidence assessment ({ai.prompt_version}, {ai.model}): "
