@@ -35,7 +35,7 @@ uv run python -m unittest discover -s tests -v
 uv run python evals/run_eval.py
 ```
 
-The second command validates eval cases without API calls. After reviewing [the draft labels](evals/label_review.md), configuring a local ignored `.env` with `OPENAI_API_KEY`, and deciding to spend within the US$10 ceiling, `uv run python evals/run_eval.py --live` measures both prompt versions. `uv run python scripts/enrich_accounts.py --limit 100` previews selected ambiguous accounts for free; `--live` performs offline assessments. Re-export the serving snapshot afterward to display cached decisions in the app. API billing is separate from a ChatGPT/Codex subscription.
+The second command validates eval cases without API calls. After reviewing [the draft labels](evals/label_review.md), copy `.env.example` to the ignored `.env` and set `OPENAI_API_KEY` locally. Once API billing and a spend decision within the US$10 ceiling are ready, `uv run python evals/run_eval.py --live` measures both prompt versions. `uv run python scripts/enrich_accounts.py --limit 100` previews selected ambiguous accounts for free; `--live` performs offline assessments. Re-export the serving snapshot afterward to display cached decisions in the app. API billing is separate from a ChatGPT/Codex subscription.
 
 ## Submission documents
 
