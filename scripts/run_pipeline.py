@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from ingest_full import ROOT, ingest
+from ingest_full import ROOT, build_silver, ingest_bronze
 
 
 def main():
@@ -18,10 +18,11 @@ def main():
     parser.add_argument("--input", type=Path, default=ROOT / "b2_download_file_by_id")
     parser.add_argument("--limit", type=int, default=50_000, help="Maximum hosted candidate domains")
     args = parser.parse_args()
-    result = ingest(args.input, ROOT / "artifacts" / "runs")
+    bronze = ingest_bronze(args.input, ROOT / "artifacts" / "runs")
+    run_dir = ROOT / "artifacts" / "runs" / bronze["run_id"]
+    result = build_silver(run_dir)
     if result["status"] != "complete":
         raise RuntimeError("Ingestion needs quality review; serving snapshot not published")
-    run_dir = ROOT / "artifacts" / "runs" / result["run_id"]
     db = ROOT / "artifacts" / "warehouse" / "full.duckdb"
     subprocess.run([sys.executable, str(ROOT / "scripts" / "register_silver.py"),
                     "--run", str(run_dir), "--db", str(db)], check=True)

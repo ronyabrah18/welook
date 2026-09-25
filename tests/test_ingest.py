@@ -10,7 +10,7 @@ import unittest
 import duckdb
 import pyarrow.parquet as pq
 
-from scripts.ingest_full import ROOT, ingest
+from scripts.ingest_full import ROOT, build_silver, ingest, ingest_bronze
 
 
 def observation(domain: str, port: int = 443) -> dict:
@@ -63,6 +63,34 @@ class IngestionContractTest(unittest.TestCase):
             self.assertEqual(result["counts"]["bronze_rows"], 1)
             self.assertEqual(result["counts"]["core_rejects"], 1)
             self.assertEqual(result["counts"]["silver_rows"], 0)
+            self.assertEqual(json.loads((root / "runs" / result["run_id"] / "quarantine.jsonl").read_text())["stage"], "core")
+
+    def test_silver_replays_completed_bronze_without_landing_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.jsonl"
+            write_jsonl(source, [observation("example.com")])
+            bronze = ingest_bronze(source, root / "runs")
+            run_dir = root / "runs" / bronze["run_id"]
+            self.assertTrue((run_dir / "bronze_manifest.json").exists())
+            self.assertFalse((run_dir / "silver").exists())
+            source.unlink()
+            silver = build_silver(run_dir)
+            self.assertEqual(silver["counts"]["silver_rows"], 1)
+            self.assertEqual(pq.read_table(next((run_dir / "silver").glob("*.parquet"))).num_rows, 1)
+
+    def test_malformed_source_record_goes_to_bronze_and_quarantine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "bad.jsonl"
+            source.write_bytes(b"{invalid json}\n\xff\n")
+            result = ingest(source, root / "runs")
+            run_dir = root / "runs" / result["run_id"]
+            self.assertEqual(result["status"], "needs_review")
+            self.assertEqual(result["counts"]["bronze_rows"], 2)
+            self.assertEqual(result["counts"]["parse_rejects"], 2)
+            self.assertEqual(result["counts"]["silver_rows"], 0)
+            self.assertEqual(len((run_dir / "quarantine.jsonl").read_text().splitlines()), 2)
 
 
 if __name__ == "__main__":

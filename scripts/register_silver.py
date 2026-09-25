@@ -19,11 +19,18 @@ def main():
     selected = json.loads((args.run / "manifest.json").read_text())
     if selected["status"] != "complete":
         raise ValueError("Run needs quality review before registering")
-    runs = []
+    # A schema upgrade creates another run for the same immutable source file.
+    # Register only its newest complete version, never both copies.
+    newest_by_source = {}
     for manifest_path in sorted(args.run.parent.glob("*/manifest.json")):
         manifest = json.loads(manifest_path.read_text())
         if manifest["status"] == "complete" and manifest.get("max_records") is None:
-            runs.append((manifest_path.parent, manifest))
+            key = manifest["source_sha256"]
+            version = int(manifest["schema_version"])
+            prior = newest_by_source.get(key)
+            if prior is None or version > int(prior[1]["schema_version"]):
+                newest_by_source[key] = (manifest_path.parent, manifest)
+    runs = sorted(newest_by_source.values(), key=lambda item: item[1]["run_id"])
     if not runs:
         raise ValueError("No completed full arrivals to register")
     patterns = [str((run_dir / "silver" / "*.parquet").resolve()).replace("'", "''")

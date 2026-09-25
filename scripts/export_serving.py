@@ -88,7 +88,11 @@ def main():
         source.execute("CREATE INDEX evidence_domain_idx ON serving.evidence(candidate_domain)")
         source.execute("DETACH serving")
     pending.replace(args.output)
-    report = {"output": str(args.output), "size_bytes": args.output.stat().st_size,
+    try:
+        report_output = str(args.output.resolve().relative_to(ROOT))
+    except ValueError:
+        report_output = str(args.output)
+    report = {"output": report_output, "size_bytes": args.output.stat().st_size,
               "candidate_accounts": total, "hosted_accounts": selected,
               "hosted_evidence_rows": evidence, "ai_assessed_accounts": ai_count,
               "source_lines": source_lines,

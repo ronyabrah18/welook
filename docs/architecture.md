@@ -1,6 +1,6 @@
 # WeLook: system design
 
-**Design v1 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/). Reviewer invitations remain outstanding. The optional offline LLM workflow has no published decisions or quality evaluation.
+**Design v2 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/). Reviewer invitations remain outstanding. The optional offline LLM workflow has no published decisions or quality evaluation.
 
 ## What the salesperson gets
 
@@ -22,8 +22,7 @@ flowchart LR
   G --> H
   H --> D[Small read-only<br/>serving DuckDB]
   D --> U[Hosted Streamlit app<br/>filter, review, shortlist, export]
-  B -. invalid records .-> Q[Quarantine + quality report]
-  S -. invalid fields .-> Q
+  B -. invalid records during validation .-> Q[Quarantine + quality report]
 ```
 
 All heavy processing happens in a **local, repeatable batch command**. The hosted app only reads a compact serving snapshot. This keeps hosting simple and avoids running the 12.44 GB ingestion or paid model calls on page views.
@@ -31,24 +30,26 @@ All heavy processing happens in a **local, repeatable batch command**. The hoste
 | Layer | Grain and responsibility | Key control |
 | --- | --- | --- |
 | Landing | Original compressed file, unchanged | Record file checksum and byte count. |
-| Bronze | One source line per row of Parquet, with original JSON text | Keep source file ID, line number, run ID, and parse errors. No dropped fields. |
-| Silver | Typed observation plus separate vulnerability/evidence rows | Validate core fields, preserve unknown optional fields in bronze, quarantine bad core records. |
-| Gold | Candidate account, account-observation links, signal, and priority | Keep provenance, conflicting matches, provider status, and rule/AI decision state. |
+| Bronze | One source line per row of Parquet, with original UTF-8 text or undecodable bytes | Keep source file ID, line number, run ID, and content hash. No parsing or dropped source lines. |
+| Silver | One validated, typed observation per accepted source row | Read completed bronze parts, check core fields, keep selected nested data and vulnerability JSON, quarantine rejects. |
+| Gold | Candidate account, account-observation evidence links, and priority | Keep provenance, match strength, provider status, and rule/AI decision state. |
 | Serving | One compact account queue with selected evidence | Publish only after reconciliation and quality checks pass. |
 
-Python streams the Zstandard file line by line and writes bounded Parquet batches; memory should not scale with the full decompressed 88.5 GB. Reconcile counts at each boundary: source lines = bronze rows + parse rejects; bronze rows = accepted observations + core-contract rejects; accepted observations = distinct observations + recorded duplicates. Each run has a manifest with input hash, code/schema version, counts, errors, and output checksums. A failed run leaves the last good serving snapshot intact. The single Zstandard frame may need decompression from the start if landing-to-bronze fails; completed bronze parts allow downstream restart.
+The Python runner has two explicit, bounded stages. It streams the Zstandard source into bronze and publishes a bronze manifest. Only then does silver read the completed bronze Parquet parts, parse and validate each record, and publish silver plus a quarantine side output. Memory does not scale with the full decompressed 88.5 GB. Reconcile `source lines = bronze rows` and `bronze rows = silver rows + parse rejects + core rejects`; dbt staging then deduplicates exact content hashes. Each stage records the source hash, schema version, counts, and elapsed time. A failed build leaves the last good serving snapshot intact. A failed landing-to-bronze run may need to decompress the single Zstandard frame again; a completed bronze run lets silver replay without the landing file.
 
 ### Validation contract and tool choices
 
-Validation is layered: ingestion rejects malformed JSON or invalid core IP/port/transport/timestamp values to quarantine while retaining parseable originals in bronze; PyArrow enforces the typed silver Parquet schema; dbt tests check model-level uniqueness, required fields, accepted values, and valid vulnerability JSON. The offline AI result has a strict JSON output schema plus evidence-ID checks. The run manifest records counts and optional-field type issues, so an accepted row is not confused with a clean optional field.
+Validation is layered: bronze preserves every source line, including malformed JSON or undecodable bytes; silver sends parsing and invalid core IP/port/transport/timestamp failures to a separate `quarantine.jsonl` with source identity and reason. PyArrow enforces the typed silver Parquet schema; dbt tests check model-level uniqueness, required fields, accepted values, and valid vulnerability JSON. The offline AI result has a strict JSON output schema plus evidence-ID checks. The silver manifest records counts and optional-field type issues, so an accepted row is not confused with a clean optional field.
 
-Pydantic would be reasonable for a small configuration or API boundary, but running a second Python object validator over all 11.8 million observations would duplicate the current core checks without a clear benefit. Similarly, pandas is useful for small exploratory tables, but the full pipeline already streams bounded Arrow batches and computes aggregates in DuckDB. The one-command runner expresses the actual one-snapshot build. If this became a scheduled feed, an **Airflow DAG** could call the existing ingest, register, dbt, and export commands in dependency order; a scheduler and metadata service are not needed for this take-home run.
+Pydantic would be reasonable for a small configuration or API boundary, but running a second Python object validator over all 11.8 million observations would duplicate the current core checks without a clear benefit. Similarly, pandas is useful for small exploratory tables, but the full pipeline already streams bounded Arrow batches and computes aggregates in DuckDB. The one-command runner expresses the actual one-snapshot build. If this became a scheduled feed, an **Airflow DAG** could call the bronze, silver, register, dbt, and export stages in dependency order; a scheduler and metadata service are not needed for this take-home run.
 
 ### Incremental-load contract
 
-Treat each future arrival as an **immutable source file**. Register its checksum and source identifier first. If that file and processing version are already complete, skip its ingestion. Append its new bronze/silver parts, then register all completed arrivals together. The prototype **rebuilds the derived dbt tables** from cumulative silver on a new arrival; the full build took about one minute for this snapshot. Only the affected accounts need AI reassessment because their evidence hashes change. A targeted gold refresh would be a later optimisation. This makes repeated source ingestion idempotent without requiring a streaming service or warehouse.
+Treat each future arrival as an **immutable source file**. Register its checksum and source identifier first. If that file and processing version are already complete, skip bronze and silver. Append its new bronze/silver parts, then register completed arrivals together; when a source is reprocessed under a newer schema version, register only the newest complete version. The prototype **rebuilds the derived dbt tables** from cumulative silver on a new arrival; the v2 full build took about 1.8 minutes. Only affected accounts would need AI reassessment because their evidence hashes change. A targeted gold refresh would be a later optimisation. This makes repeated source ingestion idempotent without requiring a streaming service or warehouse.
 
-The supplied data is one snapshot, so **initial delivery is a full load**. A later full replacement snapshot, correction, or deletion would need an explicit source contract and snapshot-diff/retraction logic; append-only arrivals alone cannot prove which old observations have disappeared. A small two-file fixture should demonstrate a first load, a repeated no-op, and a second file that updates one account without duplicating existing evidence.
+The supplied data is one snapshot, so **initial delivery is a full load**. A later full replacement snapshot, correction, or deletion would need an explicit source contract and snapshot-diff/retraction logic; append-only arrivals alone cannot prove which old observations have disappeared. A small fixture demonstrates a first load, a repeated no-op, a second file, malformed-record quarantine, and silver replay from bronze after removal of the landing file.
+
+This prototype uses one schema version for the source run and silver contract. A future silver-only rule change would need an explicit rebuild/version policy; today, a new schema version creates a new run and registers only its latest complete result. This keeps the take-home runner simple while preserving the bronze-to-silver boundary and recovery from an incomplete silver stage.
 
 ## Account logic and priorities
 
@@ -85,8 +86,8 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 
 ## Build order and proof of completion
 
-1. **Done:** stream the full file into bronze/silver, reconcile 11,768,718 rows, and exercise a two-file incremental fixture.
-2. **Done:** build and test 425,121 candidate domains with dbt, then export a 21.2 MB serving snapshot and run the Streamlit app locally.
+1. **Done:** stream the full file into bronze, rebuild silver from bronze, reconcile 11,768,718 rows, and exercise incremental, replay, and quarantine fixtures.
+2. **Done:** build and test 425,121 candidate domains with dbt, then export a about 21 MB serving snapshot and run the Streamlit app locally.
 3. **Partly done:** the traced, budgeted offline AI adapter exists, but it has no submitted labelled evaluation or published app decisions.
 4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, invite reviewers and verify their access.
 
