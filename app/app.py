@@ -22,7 +22,7 @@ def query(sql: str, params: list | None = None):
 
 
 def account_rows(search: str, tiers: list[str], attribution: list[str], limit: int = 100,
-                 signal: str = "Any signal"):
+                 signal: str = "Any signal", direct_only: bool = False):
     conditions = ["1=1"]
     params: list = []
     if search:
@@ -34,6 +34,8 @@ def account_rows(search: str, tiers: list[str], attribution: list[str], limit: i
     if attribution:
         conditions.append("attribution_status IN (SELECT unnest(?))")
         params.append(attribution)
+    if direct_only:
+        conditions.append("a.attribution_status = 'supported'")
     signal_columns = {
         "Scanner-verified association": "a.verified_vulnerability_association_count",
         "Admin or login page": "a.admin_or_login_observation_count",
@@ -117,14 +119,19 @@ prospects, research, ai_examples, saved, method = st.tabs(
 )
 
 with prospects:
+    direct_only = st.toggle(
+        "Direct domain matches only",
+        help="Keep accounts with both an HTTP-host and certificate-domain match. This excludes known "
+             "provider-only and partial matches, but does not verify a legal business or service operator.",
+    )
     left, middle, right = st.columns([2, 2, 2])
     search = left.text_input("Find a domain", placeholder="company.example")
     tiers = middle.multiselect("Priority", ["investigate_first", "research", "low_evidence"],
-                                default=["investigate_first", "research"])
+                                default=["investigate_first", "research", "low_evidence"])
     attribution = right.multiselect("Attribution", ["supported", "partial", "unresolved", "provider_only"])
     signal = st.selectbox("Technical signal", ["Any signal", "Scanner-verified association",
                                                "Admin or login page", "Any vulnerability association"])
-    matches = account_rows(search, tiers, attribution, signal=signal)
+    matches = account_rows(search, tiers, attribution, signal=signal, direct_only=direct_only)
     st.caption(f"Showing {len(matches):,} highest-ranked matching accounts. Search by domain to narrow further.")
     st.dataframe(matches, hide_index=True, width="stretch")
     if len(matches):
@@ -213,6 +220,7 @@ with method:
     st.subheader("What the labels mean")
     st.markdown("""
     - **Supported attribution:** The candidate domain matches both HTTP host and certificate name in an observation. It still needs human verification.
+    - **Direct domain matches only:** A rule-based evidence filter, not an LLM-verified business list. Hosting companies may still pass if their own host and certificate match.
     - **Partial attribution:** One of those fields matches; the other is absent or different.
     - **Provider only:** The candidate domain is on a conservative infrastructure-provider list.
     - **Investigation score:** A transparent technical-research score, not a sales conversion probability.

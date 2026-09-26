@@ -1,6 +1,6 @@
 # WeLook — cybersecurity account research
 
-WeLook turns the supplied internet-service observations into an evidence-backed prospect queue for a team selling external attack-surface monitoring. Reps can filter candidate domains, inspect why an account appears, move uncertain cases to research, save a session shortlist, and export a CSV brief. Technical observations are leads for investigation, not confirmed vulnerabilities or buying intent.
+WeLook turns the supplied internet-service observations into an evidence-backed prospect queue for a team selling external attack-surface monitoring. Reps can filter candidate domains, switch to direct domain matches, inspect why an account appears, move uncertain cases to research, save a session shortlist, and export a CSV brief. The direct-match switch uses host and certificate rules; it does not verify business identity. Technical observations are leads for investigation, not confirmed vulnerabilities or buying intent.
 
 **Hosted app:** [welook.streamlit.app](https://welook.streamlit.app/). The app is deployed from `main` and currently private; Firmable reviewers need a Streamlit viewer invitation. The app also runs locally from the committed serving snapshot.
 
