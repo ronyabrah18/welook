@@ -6,9 +6,9 @@ WeLook turns the supplied internet-service observations into an evidence-backed 
 
 ## How it works
 
-![WeLook architecture: full-source ingestion, local warehouse, offline AI assessment, and hosted app](docs/diagrams/architecture_diagram.png)
+![Editable WeLook architecture sketch: full-source ingestion, local warehouse, offline AI assessment, and hosted app](docs/diagrams/architecture_diagram_sketch.png)
 
-The diagram shows the **current implementation**, including where each layer lives and how counts change. Its PNG is generated from [render_architecture_diagram.py](scripts/render_architecture_diagram.py) using the serving report. An [editable Excalidraw diagram](docs/diagrams/welook-architecture.excalidraw) is also available for moving or annotating components.
+The sketch shows the **current implementation** and is backed by an [editable Excalidraw file](docs/diagrams/welook-architecture.excalidraw). Its PNG preview comes from [render_excalidraw_preview.py](scripts/render_excalidraw_preview.py). A [clean presentation PNG](docs/diagrams/architecture_diagram.png), generated from the serving report with [render_architecture_diagram.py](scripts/render_architecture_diagram.py), adds physical paths for each layer.
 
 The full data path is running end to end. A separate gold AI-assessment table holds 42 advisory offline research notes: 33 guarded batch notes for ambiguous accounts, two earlier reviewed examples, and seven individually reviewed `investigate_first` briefs. The serving snapshot copies only assessments for its hosted accounts. The rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
 
