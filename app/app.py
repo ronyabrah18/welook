@@ -245,7 +245,7 @@ with st.expander("How to read the evidence"):
     - **Investigate first:** Both domain fields match and a scanner-verified vulnerability label appears on the same observation. Verify the finding and operator before outreach.
     - **Needs research:** A weaker signal or account match, including an admin/login title. A login page is not a vulnerability by itself.
     - **Direct domain matches only:** A rule-based evidence filter, not a verified-business list. A hosting provider can still pass.
-    - **AI notes:** Offline suggestions on 35 selected accounts. Most accounts use rules only; notes are not a measured quality evaluation or permission to contact a business.
+    - **AI notes:** Offline research suggestions on 35 selected candidate domains. Most candidates use rules only; notes do not change priority or establish permission to contact a business.
     """)
     st.write("This is one historical scan snapshot. It cannot establish current exposure, "
              "buying intent, company territory, legal identity, or a decision-maker.")
