@@ -10,7 +10,7 @@ The supplied snapshot is the core dataset: **11,768,718 service observations** i
 
 ## Data flow
 
-The [editable Excalidraw diagram](diagrams/welook-architecture.excalidraw) has a [sketch-style PNG preview](diagrams/architecture_diagram_sketch.png) for walkthroughs. A [clean architecture PNG](diagrams/architecture_diagram.png) adds the current storage paths and record-count reductions.
+The [architecture PNG](diagrams/architecture_diagram.png) shows the current storage paths, record-count reductions, and the separate quarantine output of silver validation. An [editable Excalidraw diagram](diagrams/welook-architecture.excalidraw) shows the same flow for walkthroughs.
 
 ```mermaid
 flowchart LR

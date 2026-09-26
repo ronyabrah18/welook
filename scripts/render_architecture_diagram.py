@@ -150,6 +150,13 @@ def main() -> None:
         arrow(draw, (left + 430, 650), (right - 12, 650))
         label(draw, (left + 426, 580), name, 25, MUTED, True)
 
+    # Silver validation has two outcomes. Rejected rows never enter the typed
+    # silver Parquet or the gold models; they are written beside the run parts.
+    arrow(draw, (1340, 868), (1340, 912), color="#C1772B", width=6)
+    box(draw, (1080, 913, 1600, 988), "#FFF3E2", border="#E1A153", radius=15)
+    label(draw, (1102, 922), "QUARANTINE  /  rejected rows", 27, "#854C17", True)
+    label(draw, (1102, 955), "quarantine.jsonl  ·  0 in this full run", 24, MUTED)
+
     # Offline AI is a separate branch from rule-based gold, then joins serving.
     draw.line([(1860, 869), (1860, 987)], fill="#48A56C", width=7)
     draw.polygon([(1860, 999), (1848, 978), (1872, 978)], fill="#48A56C")
@@ -160,8 +167,8 @@ def main() -> None:
     panel(draw, (90, 1000, 1070, 1430), "Data quality + replay", "DATA ENGINEERING CONTROLS", "#FFFFFF")
     label(draw, (126, 1139), "1  File checksum skips a completed arrival", 32)
     label(draw, (126, 1200), "2  Bronze can replay silver without source", 32)
-    label(draw, (126, 1261), "3  Rejects go to separate quarantine", 32)
-    label(draw, (126, 1322), "4  dbt tests + source/accepted reconciliation", 32)
+    label(draw, (126, 1261), "3  Bronze = silver + quarantine rows", 32)
+    label(draw, (126, 1322), "4  Rejects stop release; dbt tests gate gold", 32)
 
     panel(draw, (1130, 1000, 2080, 1430), "Offline AI assessment", "SELECTED ACCOUNTS ONLY", "#E8F6EC")
     label(draw, (1166, 1137), "Up to 3 cited observations per domain", 32)
