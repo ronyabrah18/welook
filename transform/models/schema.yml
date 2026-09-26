@@ -35,4 +35,4 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: [investigate_first, research, low_evidence]
+                values: [investigate_first, review_next, research, low_evidence]

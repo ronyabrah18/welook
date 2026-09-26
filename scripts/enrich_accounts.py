@@ -21,26 +21,30 @@ from welook.llm_client import BudgetedAssessor  # noqa: E402
 from welook.lineage import source_registry_hash  # noqa: E402
 
 
-def selected_bundles(db: Path, limit: int, segment: str = "ambiguous") -> list[dict]:
-    if segment not in {"ambiguous", "investigate_first"}:
+def selected_bundles(db: Path, limit: int, segment: str = "review_next") -> list[dict]:
+    if segment not in {"review_next", "ambiguous", "investigate_first"}:
         raise ValueError(f"Unknown account segment: {segment}")
-    where_clause = (
-        "priority_tier = 'investigate_first'" if segment == "investigate_first"
-        else "priority_tier = 'research' AND attribution_status = 'partial'"
-    )
+    where_clause = {
+        "review_next": "priority_tier = 'review_next'",
+        "investigate_first": "priority_tier = 'investigate_first'",
+        "ambiguous": "priority_tier = 'research' AND attribution_status = 'partial'",
+    }[segment]
     with duckdb.connect(str(db), read_only=True) as con:
         registry_hash = source_registry_hash(row[0] for row in con.execute(
             "SELECT source_sha256 FROM raw.ingestion_manifest"
         ).fetchall())
         rows = con.execute(f"""
             WITH selected AS (
-                SELECT candidate_domain FROM analytics.fct_accounts
+                SELECT candidate_domain, priority_tier FROM analytics.fct_accounts
                 WHERE {where_clause}
                 ORDER BY investigation_score DESC, candidate_domain LIMIT ?
             ), ranked AS (
                 SELECT e.*, row_number() OVER (
                     PARTITION BY e.candidate_domain
-                    ORDER BY e.evidence_score DESC, e.observed_at DESC, e.source_record_id
+                    ORDER BY CASE WHEN s.priority_tier = 'review_next'
+                                      AND e.attribution_status = 'supported'
+                                      AND e.vulnerability_count > 0 THEN 0 ELSE 1 END,
+                             e.evidence_score DESC, e.observed_at DESC, e.source_record_id
                 ) AS evidence_rank
                 FROM analytics.int_account_evidence e
                 JOIN selected s USING (candidate_domain)
@@ -61,17 +65,25 @@ def selected_bundles(db: Path, limit: int, segment: str = "ambiguous") -> list[d
             "vulnerability_count": vulns, "verified_vulnerability_count": verified,
             "rule_flags": {"http_domain_match": hm, "cert_domain_match": cm,
                            "listed_provider_domain": provider}})
-    return [{"candidate_domain": domain, "source_registry_hash": registry_hash,
-             "evidence": evidence}
-            for domain, evidence in sorted(bundles.items())]
+    selected = [{"candidate_domain": domain, "source_registry_hash": registry_hash,
+                 "evidence": evidence}
+                for domain, evidence in sorted(bundles.items())]
+    if segment == "review_next":
+        selected = [bundle for bundle in selected if any(
+            item["rule_flags"]["http_domain_match"]
+            and item["rule_flags"]["cert_domain_match"]
+            and item["vulnerability_count"] > 0
+            for item in bundle["evidence"])]
+    return selected
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "full.duckdb")
     parser.add_argument("--limit", type=int, default=100)
-    parser.add_argument("--segment", choices=["ambiguous", "investigate_first"], default="ambiguous")
-    parser.add_argument("--prompt", choices=["v1", "v2", "v3", "v4"], default="v4")
+    parser.add_argument("--segment", choices=["review_next", "ambiguous", "investigate_first"],
+                        default="review_next")
+    parser.add_argument("--prompt", choices=["v1", "v2", "v3", "v4", "v5"], default="v5")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts" / "ai" / "assessments.jsonl")
     args = parser.parse_args()

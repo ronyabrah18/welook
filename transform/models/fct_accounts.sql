@@ -8,6 +8,8 @@ with grouped as (
            count(distinct case when verified_vulnerability_count > 0 then observation_id end) as verified_vulnerability_association_count,
            count(distinct case when attribution_status = 'supported' and verified_vulnerability_count > 0
                                then observation_id end) as directly_supported_verified_observation_count,
+           count(distinct case when attribution_status = 'supported' and vulnerability_count > 0
+                              then observation_id end) as directly_supported_vulnerability_observation_count,
            count(distinct case when admin_or_login_title then observation_id end) as admin_or_login_observation_count,
            min(observed_at) as first_observed_at,
            max(observed_at) as last_observed_at,
@@ -24,6 +26,7 @@ with grouped as (
 select candidate_domain, observation_count, supported_observation_count,
        vulnerability_association_count, verified_vulnerability_association_count,
        directly_supported_verified_observation_count,
+       directly_supported_vulnerability_observation_count,
        admin_or_login_observation_count,
        first_observed_at, last_observed_at, investigation_score, provider_domain,
        example_http_title, example_product,
@@ -31,6 +34,8 @@ select candidate_domain, observation_count, supported_observation_count,
             when 1 then 'unresolved' else 'provider_only' end as attribution_status,
        case when directly_supported_verified_observation_count > 0
                  then 'investigate_first'
+            when directly_supported_vulnerability_observation_count > 0
+                 then 'review_next'
             when attribution_rank >= 2 and
                  (vulnerability_association_count > 0 or admin_or_login_observation_count > 0)
                  then 'research'
@@ -38,6 +43,7 @@ select candidate_domain, observation_count, supported_observation_count,
        case when attribution_rank = 0 then 'Check whether this is only provider infrastructure'
             when attribution_rank < 3 then 'Verify which business operates the observed service'
             when directly_supported_verified_observation_count > 0 then 'Review scanner-verified vulnerability evidence before outreach'
+            when directly_supported_vulnerability_observation_count > 0 then 'Validate the scanner vulnerability label and confirm the service operator'
             when verified_vulnerability_association_count > 0 then 'Verify that the scanner-labelled service belongs to this business'
             when vulnerability_association_count > 0 then 'Validate the unverified vulnerability association'
             when admin_or_login_observation_count > 0 then 'Confirm the exposed interface and find the security owner'

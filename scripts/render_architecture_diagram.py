@@ -131,7 +131,7 @@ def main() -> None:
         ("04", "GOLD", "#DDEBFF", [
             ("DuckDB + dbt SQL", True), ("9,334,905 evidence links", False),
             (f"{stats['candidate_accounts']:,} domains", True),
-            ("7 investigate first", False)],
+            ("7 first  ·  5,411 review next", False)],
             "artifacts/warehouse/full.duckdb"),
         ("05", "SERVING", "#FFE7DD", [
             ("Read-only DuckDB", True), (f"{stats['hosted_accounts']:,} ranked domains", True),
@@ -173,13 +173,13 @@ def main() -> None:
     panel(draw, (1130, 1000, 2080, 1430), "Offline AI assessment", "SELECTED ACCOUNTS ONLY", "#E8F6EC")
     label(draw, (1166, 1137), "Up to 3 cited observations per domain", 32)
     label(draw, (1166, 1198), "GPT-4.1 mini + versioned prompt", 32)
-    label(draw, (1166, 1259), "Publication gate -> gold AI table (42 notes)", 32)
+    label(draw, (1166, 1259), "Publication gate -> gold AI table (46 notes)", 32)
     label(draw, (1166, 1320), "9 human-reviewed; local traces; $10 ceiling", 32)
 
     panel(draw, (2170, 1000, 3110, 1430), "Salesperson workflow", "HOSTED, READ-ONLY", "#F2ECFF")
     label(draw, (2206, 1137), "1  Filter evidence and product signals", 32)
     label(draw, (2206, 1198), "2  Review why a domain is in the queue", 32)
-    label(draw, (2206, 1259), "3  Record human research status", 32)
+    label(draw, (2206, 1259), "3  Record identity source + status", 32)
     label(draw, (2206, 1320), "4  Export a cited handoff CSV", 32)
 
     box(draw, (90, 1515, 3110, 1715), "#EDF2F8", radius=22)

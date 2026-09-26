@@ -37,33 +37,42 @@ def main():
             SELECT candidate_domain, observation_count, supported_observation_count,
                    vulnerability_association_count, verified_vulnerability_association_count,
                    directly_supported_verified_observation_count,
+                   directly_supported_vulnerability_observation_count,
                    admin_or_login_observation_count,
                    first_observed_at, last_observed_at, investigation_score,
                    example_http_title, example_product, attribution_status,
                    priority_tier, next_action
             FROM analytics.fct_accounts
             ORDER BY CASE priority_tier WHEN 'investigate_first' THEN 0
-                        WHEN 'research' THEN 1 ELSE 2 END,
+                        WHEN 'review_next' THEN 1 WHEN 'research' THEN 2 ELSE 3 END,
                      investigation_score DESC, supported_observation_count DESC,
                      candidate_domain
             LIMIT ?
         """, [args.limit])
         source.execute("""
             CREATE TABLE serving.evidence AS
-            SELECT candidate_domain, source_record_id, source_line, observed_at,
-                   ip_address, port, infrastructure_org, infrastructure_country,
-                   product, http_host, http_title, certificate_cn,
-                   vulnerability_count, verified_vulnerability_count,
-                   http_domain_match, cert_domain_match,
-                   admin_or_login_title, attribution_status, evidence_score
+            SELECT selected.candidate_domain, selected.source_record_id,
+                   selected.source_line, selected.observed_at,
+                   selected.ip_address, selected.port, selected.infrastructure_org,
+                   selected.infrastructure_country, selected.product,
+                   selected.http_host, selected.http_title, selected.certificate_cn,
+                   selected.vulnerability_count, selected.verified_vulnerability_count,
+                   selected.http_domain_match, selected.cert_domain_match,
+                   selected.admin_or_login_title, selected.attribution_status,
+                   selected.evidence_score,
+                   json_keys(s.vulnerabilities_json) AS scanner_label_ids
             FROM (
                 SELECT e.*, row_number() OVER (
                     PARTITION BY e.candidate_domain
-                    ORDER BY e.evidence_score DESC, e.observed_at DESC, e.source_record_id
+                    ORDER BY CASE WHEN a.priority_tier = 'review_next'
+                                      AND e.attribution_status = 'supported'
+                                      AND e.vulnerability_count > 0 THEN 0 ELSE 1 END,
+                             e.evidence_score DESC, e.observed_at DESC, e.source_record_id
                 ) AS rank_in_account
                 FROM analytics.int_account_evidence e
                 JOIN serving.accounts a USING (candidate_domain)
             ) selected
+            LEFT JOIN analytics.stg_observations s USING (source_record_id)
             WHERE rank_in_account <= 3
         """)
         ai_info = source.execute("""SELECT source_registry_hash, stale_ai_notes_skipped

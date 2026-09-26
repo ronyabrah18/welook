@@ -9,6 +9,30 @@ from scripts.publish_assessments import publish, stable_evidence_id
 
 
 class PublishAssessmentsTest(unittest.TestCase):
+    def test_v5_scanner_overclaim_is_withheld(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            batch, reviewed, output = (root / name for name in ("batch.jsonl", "reviewed.jsonl", "out.jsonl"))
+            reviewed.write_text("")
+            records = [
+                {"candidate_domain": "unsafe.example", "prompt_version": "v5", "status": "completed",
+                 "assessed_at_utc": "2026-09-26T00:00:00+00:00", "model": "test-model",
+                 "result": {"decision": "needs_review", "evidence_ids": ["source-record-one"],
+                            "reason": "Ten unverified vulnerabilities found on a matching host.",
+                            "next_action": "Check the finding and operator."}},
+                {"candidate_domain": "cautious.example", "prompt_version": "v5", "status": "completed",
+                 "assessed_at_utc": "2026-09-26T00:00:00+00:00", "model": "test-model",
+                 "result": {"decision": "needs_review", "evidence_ids": ["source-record-two"],
+                            "reason": "The matching host has an unverified scanner label.",
+                            "next_action": "Verify the unverified vulnerabilities and current operator."}},
+            ]
+            batch.write_text("".join(json.dumps(record) + "\n" for record in records))
+            report = publish(batch, reviewed, output, "a" * 64)
+            published = [json.loads(line) for line in output.read_text().splitlines()]
+            self.assertEqual(report["withheld_unsafe_wording"], 1)
+            self.assertEqual([row["candidate_domain"] for row in published], ["cautious.example"])
+            self.assertIn("unverified scanner labels", published[0]["result"]["next_action"])
+
     def test_newer_prompt_replaces_old_account_note(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

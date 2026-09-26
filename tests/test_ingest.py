@@ -43,6 +43,7 @@ class IngestionContractTest(unittest.TestCase):
             write_jsonl(second, [
                 {**observation("example.com", 8443), "domains": ["example.com", "EXAMPLE.COM"]},
                 {**observation("other.co.uk"), "vulns": {"CVE-2026-0001": {"verified": True}}},
+                {**observation("candidate.co"), "vulns": {"CVE-2026-0003": {"verified": False}}},
                 {**observation("example.com", 9443),
                  "http": {"host": "unrelated.net", "title": "Example"},
                  "ssl": {"cert": {"subject": {"CN": "unrelated.net"}}},
@@ -89,11 +90,13 @@ class IngestionContractTest(unittest.TestCase):
                 self.assertEqual(con.execute("SELECT count(*) FROM analytics.account_ai_assessments").fetchone()[0], 0)
                 self.assertEqual(con.execute("SELECT stale_ai_notes_skipped FROM analytics.ai_assessment_build_info").fetchone()[0], 1)
             with duckdb.connect(str(serving), read_only=True) as con:
-                self.assertEqual(con.execute("SELECT count(*) FROM accounts").fetchone()[0], 2)
+                self.assertEqual(con.execute("SELECT count(*) FROM accounts").fetchone()[0], 3)
                 self.assertEqual(con.execute("SELECT observation_count FROM accounts WHERE candidate_domain='example.com'").fetchone()[0], 3)
                 self.assertEqual(con.execute("SELECT priority_tier FROM accounts WHERE candidate_domain='example.com'").fetchone()[0], "research")
                 self.assertEqual(con.execute("SELECT verified_vulnerability_association_count, directly_supported_verified_observation_count FROM accounts WHERE candidate_domain='example.com'").fetchone(), (1, 0))
                 self.assertEqual(con.execute("SELECT priority_tier FROM accounts WHERE candidate_domain='other.co.uk'").fetchone()[0], "investigate_first")
+                self.assertEqual(con.execute("SELECT priority_tier FROM accounts WHERE candidate_domain='candidate.co'").fetchone()[0], "review_next")
+                self.assertEqual(con.execute("SELECT directly_supported_vulnerability_observation_count FROM accounts WHERE candidate_domain='candidate.co'").fetchone()[0], 1)
                 self.assertEqual(con.execute("SELECT count(*) FROM evidence WHERE candidate_domain='example.com'").fetchone()[0], 3)
                 self.assertEqual(con.execute("SELECT count(DISTINCT source_record_id) FROM evidence WHERE candidate_domain='example.com'").fetchone()[0], 3)
                 self.assertEqual(con.execute("SELECT count(*) FROM evidence WHERE candidate_domain='example.com' AND source_line=1").fetchone()[0], 2)

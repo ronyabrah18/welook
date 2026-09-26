@@ -40,7 +40,7 @@ def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path
         decision = result["decision"]
         evidence_ids = result["evidence_ids"]
         account = source.execute(
-            "SELECT attribution_status FROM analytics.fct_accounts WHERE candidate_domain = ?", [domain]
+            "SELECT attribution_status, priority_tier FROM analytics.fct_accounts WHERE candidate_domain = ?", [domain]
         ).fetchone()
         if account is None or decision not in {"supported", "needs_review", "insufficient_evidence"}:
             raise ValueError(f"Invalid reviewed assessment on line {line_number}: account or decision")
@@ -53,13 +53,16 @@ def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path
             FROM (
                 SELECT source_record_id, http_domain_match, cert_domain_match,
                        row_number() OVER (
-                           ORDER BY evidence_score DESC, observed_at DESC, source_record_id
+                           ORDER BY CASE WHEN ? = 'review_next'
+                                             AND attribution_status = 'supported'
+                                             AND vulnerability_count > 0 THEN 0 ELSE 1 END,
+                                    evidence_score DESC, observed_at DESC, source_record_id
                        ) AS rank_in_account
                 FROM analytics.int_account_evidence
                 WHERE candidate_domain = ?
             ) selected
             WHERE rank_in_account <= 3
-        """, [domain]).fetchall()}
+        """, [account[1], domain]).fetchall()}
         if not evidence_ids or not set(evidence_ids).issubset(evidence):
             raise ValueError(f"Reviewed assessment cites evidence absent from serving snapshot: {domain}")
         if decision == "supported" and not any(
