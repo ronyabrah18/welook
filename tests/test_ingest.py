@@ -52,9 +52,11 @@ class IngestionContractTest(unittest.TestCase):
                 subprocess.run([str(ROOT / ".venv" / "bin" / "dbt"), "build",
                                 "--profiles-dir", "."], cwd=ROOT / "transform", env=env,
                                check=True, capture_output=True)
+                subprocess.run([sys.executable, str(ROOT / "scripts" / "register_ai_gold.py"),
+                                "--db", str(db), "--assessments", str(assessments)],
+                               check=True, capture_output=True)
                 subprocess.run([sys.executable, str(ROOT / "scripts" / "export_serving.py"),
-                                "--db", str(db), "--output", str(serving),
-                                "--assessments", str(assessments)],
+                                "--db", str(db), "--output", str(serving)],
                                check=True, capture_output=True)
 
             first_run = ingest(first, runs)
@@ -68,6 +70,8 @@ class IngestionContractTest(unittest.TestCase):
                            "reason": "Host and certificate match", "next_action": "Confirm the operator"},
             }) + "\n")
             refresh(runs / first_run["run_id"])
+            with duckdb.connect(str(db), read_only=True) as con:
+                self.assertEqual(con.execute("SELECT count(*) FROM analytics.account_ai_assessments").fetchone()[0], 1)
             with duckdb.connect(str(serving), read_only=True) as con:
                 self.assertEqual(con.execute("SELECT count(*) FROM accounts").fetchone()[0], 1)
                 self.assertEqual(con.execute("SELECT observation_count FROM accounts WHERE candidate_domain='example.com'").fetchone()[0], 1)
@@ -75,6 +79,9 @@ class IngestionContractTest(unittest.TestCase):
 
             second_run = ingest(second, runs)
             refresh(runs / second_run["run_id"])
+            with duckdb.connect(str(db), read_only=True) as con:
+                self.assertEqual(con.execute("SELECT count(*) FROM analytics.account_ai_assessments").fetchone()[0], 0)
+                self.assertEqual(con.execute("SELECT stale_ai_notes_skipped FROM analytics.ai_assessment_build_info").fetchone()[0], 1)
             with duckdb.connect(str(serving), read_only=True) as con:
                 self.assertEqual(con.execute("SELECT count(*) FROM accounts").fetchone()[0], 2)
                 self.assertEqual(con.execute("SELECT observation_count FROM accounts WHERE candidate_domain='example.com'").fetchone()[0], 2)

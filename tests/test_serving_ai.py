@@ -7,28 +7,32 @@ import unittest
 
 import duckdb
 
-from scripts.export_serving import validate_published_assessments
+from scripts.register_ai_gold import validate_published_assessments
 
 
 class ServingAiTest(unittest.TestCase):
     def setUp(self):
         self.con = duckdb.connect()
-        self.con.execute("ATTACH ':memory:' AS serving")
-        self.con.execute("CREATE TABLE serving.accounts (candidate_domain VARCHAR, attribution_status VARCHAR)")
-        self.con.execute("CREATE TABLE serving.evidence (candidate_domain VARCHAR, source_record_id VARCHAR, http_domain_match BOOLEAN, cert_domain_match BOOLEAN)")
-        self.con.execute("INSERT INTO serving.accounts VALUES ('platform.example', 'provider_only'), ('firm.example', 'partial'), ('direct.example', 'supported')")
-        self.con.execute("INSERT INTO serving.evidence VALUES ('platform.example', 'one', true, true), ('firm.example', 'two', false, true), ('direct.example', 'three', true, true)")
+        self.con.execute("CREATE SCHEMA analytics")
+        self.con.execute("CREATE TABLE analytics.fct_accounts (candidate_domain VARCHAR, attribution_status VARCHAR)")
+        self.con.execute("CREATE TABLE analytics.int_account_evidence (candidate_domain VARCHAR, source_record_id VARCHAR, http_domain_match BOOLEAN, cert_domain_match BOOLEAN, evidence_score INTEGER, observed_at TIMESTAMP)")
+        self.con.execute("INSERT INTO analytics.fct_accounts VALUES ('platform.example', 'provider_only'), ('firm.example', 'partial'), ('direct.example', 'supported')")
+        self.con.execute("INSERT INTO analytics.int_account_evidence VALUES ('platform.example', 'one', true, true, 1, now()), ('firm.example', 'two', false, true, 1, now()), ('direct.example', 'three', true, true, 1, now())")
 
     def tearDown(self):
         self.con.close()
 
     def check_record(self, domain, decision, evidence_ids, review_status="reviewed_for_demo"):
         record = {"candidate_domain": domain, "review_status": review_status, "status": "completed",
-                  "result": {"decision": decision, "evidence_ids": evidence_ids}}
+                  "prompt_version": "test-v1", "model": "test-model",
+                  "assessed_at_utc": "2026-09-21T11:00:00+00:00",
+                  "result": {"decision": decision, "evidence_ids": evidence_ids,
+                             "reason": "Test reason", "next_action": "Check operator"}}
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "assessments.jsonl"
             path.write_text(json.dumps(record) + "\n")
-            validate_published_assessments(self.con, path)
+            accepted, stale = validate_published_assessments(self.con, path)
+            self.assertEqual((len(accepted), stale), (1, 0))
 
     def test_matching_review_evidence_is_publishable(self):
         self.check_record("firm.example", "needs_review", ["source-record-two"])

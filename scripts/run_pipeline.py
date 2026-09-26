@@ -29,6 +29,8 @@ def main():
     env = {**os.environ, "FIRMABLE_DB_PATH": str(db)}
     subprocess.run([str(ROOT / ".venv" / "bin" / "dbt"), "build", "--profiles-dir", "."],
                    cwd=ROOT / "transform", env=env, check=True)
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "register_ai_gold.py"),
+                    "--db", str(db)], check=True)
     subprocess.run([sys.executable, str(ROOT / "scripts" / "export_serving.py"),
                     "--db", str(db), "--limit", str(args.limit)], check=True)
     print("Complete: app/data/welook_serving.duckdb is ready for Streamlit")

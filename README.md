@@ -6,11 +6,18 @@ WeLook turns the supplied internet-service observations into an evidence-backed 
 
 ## How it works
 
-![WeLook architecture overview](docs/diagrams/welook-architecture-preview.png)
+```mermaid
+flowchart LR
+  L[Source JSONL.zst] --> B[Bronze Parquet] --> S[Silver Parquet]
+  S --> G[DuckDB + dbt gold accounts]
+  G --> A[Offline LLM + validation] --> AG[Gold AI assessments]
+  G --> D[Serving DuckDB]
+  AG --> D --> U[Hosted Streamlit app]
+```
 
 [Download the editable Excalidraw diagram](docs/diagrams/welook-architecture.excalidraw) and open it in Excalidraw to move or annotate each component.
 
-The full data path is running end to end. The serving snapshot includes 35 offline AI research notes: 33 guarded batch notes for ambiguous accounts and two individually reviewed examples. The rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
+The full data path is running end to end. A separate gold AI-assessment table holds 35 validated offline research notes: 33 guarded batch notes for ambiguous accounts and two individually reviewed examples. The serving snapshot copies only assessments for its hosted accounts. The rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
 
 ## What has been built
 
@@ -18,7 +25,7 @@ The full data path is running end to end. The serving snapshot includes 35 offli
 - Built 9,334,905 distinct domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. All 15 dbt model/test steps passed on the full run.
 - Exported an approximately 22 MB read-only serving snapshot with the top 50,000 candidates and 96,107 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
 - Deployed the Streamlit account queue, research queue, evidence detail, session shortlist, and CSV export; verified the hosted app starts against the full serving snapshot.
-- Added a reusable account-research skill, three prompt versions, and budgeted/traced offline API code. Of 100 v2 batch outputs, 33 cautious notes passed the publication gate and 67 overconfident `supported` outputs were withheld. A labelled evaluation set and prompt-quality results are **not included**, so the AI assessment is not presented as validated.
+- Added a reusable account-research skill, three prompt versions, and budgeted/traced offline API code. Of 100 v2 batch outputs, 33 cautious notes passed the publication gate and 67 overconfident `supported` outputs were withheld. A separate gold table stores validated published notes, while raw responses and traces remain local. A labelled evaluation set and prompt-quality results are **not included**, so the AI assessment is not presented as quality-validated.
 
 The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
 
@@ -32,7 +39,7 @@ uv run python scripts/run_pipeline.py
 uv run streamlit run app/app.py
 ```
 
-The pipeline registers immutable source-file checksums. A repeated completed file skips both bronze and silver; a completed bronze run can build or retry silver without the landing file. Run `uv run python scripts/run_pipeline.py --input /path/to/new-arrival.jsonl.zst` for each new immutable arrival. Its silver parts join the registered source, then dbt rebuilds the account marts from cumulative silver and the serving snapshot is atomically replaced. When a source is rebuilt with a newer schema, DuckDB registers only the latest complete version. An end-to-end two-file fixture checks account updates, duplicate-domain normalization, idempotence, and invalidation of stale AI notes. A replacement snapshot or deletion requires a separate source contract.
+The pipeline registers immutable source-file checksums. A repeated completed file skips both bronze and silver; a completed bronze run can build or retry silver without the landing file. Run `uv run python scripts/run_pipeline.py --input /path/to/new-arrival.jsonl.zst` for each new immutable arrival. Its silver parts join the registered source, then dbt rebuilds the account marts, validates curated AI notes into a separate gold table, and atomically replaces the serving snapshot. When a source is rebuilt with a newer schema, DuckDB registers only the latest complete version. An end-to-end two-file fixture checks account updates, duplicate-domain normalization, idempotence, and invalidation of stale AI notes. A replacement snapshot or deletion requires a separate source contract.
 
 ## Checks and AI workflow
 
@@ -40,7 +47,7 @@ The pipeline registers immutable source-file checksums. A repeated completed fil
 uv run python -m unittest discover -s tests -v
 ```
 
-The optional AI workflow selects ambiguous accounts offline. `uv run python scripts/enrich_accounts.py --limit 100` previews selected evidence bundles without an API call. After setting `OPENAI_API_KEY` in the ignored `.env`, `--live` makes budgeted calls and writes local traces. `uv run python scripts/publish_assessments.py` extracts only cautious batch outputs and combines them with the individually reviewed examples; `scripts/export_serving.py` checks the citations and supported-attribution rule before building the app snapshot. Raw local outputs never publish automatically. The notes are not a labelled quality evaluation. API billing is separate from a ChatGPT/Codex subscription.
+The optional AI workflow selects ambiguous accounts offline. `uv run python scripts/enrich_accounts.py --limit 100` previews selected evidence bundles without an API call. After setting `OPENAI_API_KEY` in the ignored `.env`, `--live` makes budgeted calls and writes local traces. `uv run python scripts/publish_assessments.py` extracts only cautious batch outputs and combines them with the individually reviewed examples. `scripts/register_ai_gold.py` checks citation visibility, supported attribution, review status, and source freshness before publishing `analytics.account_ai_assessments`; `scripts/export_serving.py` then copies the hosted subset. Raw local outputs never publish automatically. The notes are not a labelled quality evaluation. API billing is separate from a ChatGPT/Codex subscription.
 
 ## Submission documents
 
