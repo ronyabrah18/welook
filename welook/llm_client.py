@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import time
 import uuid
@@ -36,6 +38,35 @@ OUTPUT_SCHEMA = {
     "required": ["decision", "evidence_ids", "reason", "next_action"],
     "additionalProperties": False,
 }
+
+IPV4_CANDIDATE = re.compile(r"(?<![A-Za-z0-9])(?:\d{1,3}\.){3}\d{1,3}(?![A-Za-z0-9])")
+BRACKETED_IPV6_CANDIDATE = re.compile(r"\[([0-9A-Fa-f:]{2,})\]")
+
+
+def redact_network_literals(value):
+    """Remove IP literals from all evidence text before an external API call."""
+    if isinstance(value, dict):
+        return {key: redact_network_literals(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [redact_network_literals(item) for item in value]
+    if not isinstance(value, str):
+        return value
+    try:
+        ipaddress.ip_address(value.strip().strip("[]"))
+        return "[IP address redacted]"
+    except ValueError:
+        pass
+
+    def replace_ip(match):
+        candidate = match.group(1) if match.lastindex else match.group(0)
+        try:
+            ipaddress.ip_address(candidate)
+        except ValueError:
+            return match.group(0)
+        return "[IP address redacted]"
+
+    value = BRACKETED_IPV6_CANDIDATE.sub(replace_ip, value)
+    return IPV4_CANDIDATE.sub(replace_ip, value)
 
 
 def now_utc() -> str:
@@ -94,9 +125,9 @@ class BudgetedAssessor:
         allowed_ids = {item["evidence_id"] for item in evidence}
         if len(allowed_ids) != len(evidence):
             raise ValueError("Evidence IDs must be unique")
-        request_json = json.dumps({"candidate_domain": bundle["candidate_domain"],
+        request_json = json.dumps(redact_network_literals({"candidate_domain": bundle["candidate_domain"],
                                    "source_registry_hash": bundle.get("source_registry_hash"),
-                                   "evidence": evidence}, sort_keys=True, ensure_ascii=False)
+                                   "evidence": evidence}), sort_keys=True, ensure_ascii=False)
         cache_key = hashlib.sha256(json.dumps([self.model, prompt_version,
             hashlib.sha256(prompt.encode()).hexdigest(), SCHEMA_VERSION, request_json],
             ensure_ascii=False).encode()).hexdigest()

@@ -1,0 +1,33 @@
+# Label review sheet
+
+These proposed labels were drafted from the displayed evidence bundles. The source-derived inputs have IP literals redacted before API calls. Review the decision and rationale before describing the set as hand-validated in the submission. `supported` means an historical domain-service association only; no label asserts a currently vulnerable organisation.
+
+| ID | Candidate | Strongest displayed clue | Proposed decision | Why |
+| --- | --- | --- | --- | --- |
+| real-01 | 3ds.com | host pod171-33-99-21.3dexperience.3ds.com; cert *.3dexperience.3ds.com; host/cert match 1/1; labels 4/2 verified | `supported` | Matching 3dexperience HTTP host and certificate occur on a labelled historical observation. |
+| real-02 | abilitycorp.com.tw | host webmail.abilitycorp.com.tw; cert *.abilitycorp.com.tw; host/cert match 1/1; labels 5/2 verified | `supported` | Webmail host and certificate match on a historically scanner-verified labelled observation. |
+| real-03 | accea.co.jp | host www.accea.co.jp; cert *.accea.co.jp; host/cert match 1/1; labels 1/1 verified | `supported` | The website host and certificate match on a historically scanner-verified labelled observation. |
+| real-04 | exchange-swiss.ch | host mail.exchange-swiss.ch; cert mail.exchange-swiss.ch; host/cert match 1/1; labels 4/4 verified | `supported` | Mail host and certificate match on a historically scanner-verified labelled observation. |
+| real-05 | knvb.nl | host assistentscheidsrechter.knvb.nl; cert *.knvb.nl; host/cert match 1/1; labels 73/1 verified | `supported` | A KNVB HTTP host and certificate match on the historically scanner-verified labelled observation. |
+| real-06 | salem111.com | host www.salem111.com; cert *.salem111.com; host/cert match 1/1; labels 6/2 verified | `supported` | The website host and certificate match on a historically scanner-verified labelled observation. |
+| real-07 | thehartford.com | host accessmacduo.thehartford.com; cert accessmacduo.thehartford.com; host/cert match 1/1; labels 1/1 verified | `supported` | The remote-access host and certificate match on a historically scanner-verified labelled observation. |
+| real-08 | 2gr.mx | host qa.amala.2gr.mx; cert qa.amala.2gr.mx; host/cert match 1/1; labels 48/0 verified | `needs_review` | Several hosts and certificates match, but their scanner labels are unverified. |
+| real-09 | 3-east.com | host 3-east.com; cert 3-east.com; host/cert match 1/1; labels 94/0 verified | `needs_review` | Website host and certificate match, but the scanner labels are unverified despite their high count. |
+| real-10 | 7-eleven.com | host sites.7-eleven.com; cert sites.7-eleven.com; host/cert match 1/1; labels 36/0 verified | `needs_review` | An admin host and certificate match; its scanner labels are unverified and login is not proof of vulnerability. |
+| real-11 | aiblc.com | host loss20.aiblc.com; cert loss.aiblc.com; host/cert match 1/1; labels 168/0 verified | `needs_review` | A direct host/certificate observation has unverified labels; other observations have only one-sided links. |
+| real-12 | aicollabx.com | host auth-uat.aicollabx.com; cert auth-uat.aicollabx.com; host/cert match 1/1; labels 2/0 verified | `needs_review` | An authentication host and certificate match; its scanner labels are unverified. |
+| real-13 | aircanada.com | host admin.sbopt-int.digital.aircanada.com; cert sbopt-int.digital.aircanada.com; host/cert match 1/1; labels 1/0 verified | `needs_review` | Admin and login hosts match their certificates, but scanner labels remain unverified. |
+| real-14 | akgun.com.tr | host auth.akgun.com.tr; cert *.akgun.com.tr; host/cert match 1/1; labels 2/0 verified | `needs_review` | Auth host and certificate match; other rows have only certificate links and all scanner labels are unverified. |
+| real-15 | allianceinpartnership.co.uk | host stagingadmin.allianceinpartnership.co.uk; cert stagingadmin.allianceinpartnership.co.uk; host/cert match 1/1; labels 2/0 verified | `needs_review` | Admin hosts and certificates match, but scanner labels are unverified. |
+| real-16 | american.edu | host fileway19.wcl.american.edu; cert *.wcl.american.edu; host/cert match 1/1; labels 3/0 verified | `needs_review` | Fileway host and certificate match; the scanner labels are unverified and other rows are weaker. |
+| real-17 | arcaugusta.com | host arc.arcaugusta.com; cert *.arcaugusta.com; host/cert match 1/1; labels 4/0 verified | `needs_review` | Application host and certificate match, but its scanner labels are unverified. |
+| real-18 | apcmanchester.co.uk | host [IP address redacted]; cert office.apcmanchester.co.uk; host/cert match 0/1; labels 1/1 verified | `needs_review` | Certificate matches but HTTP host is only an IP; a verified label cannot resolve service operation. |
+| real-19 | cesak.eu | host [IP address redacted]; cert voyager.cesak.eu; host/cert match 0/1; labels 32/1 verified | `needs_review` | Certificate matches but HTTP host is only an IP; scanner label does not establish attribution. |
+| real-20 | dfci-fischerlab.com | host [IP address redacted]; cert cicd.dfci-fischerlab.com; host/cert match 0/1; labels 111/1 verified | `needs_review` | Certificate matches a Jenkins observation, but HTTP host is only an IP. |
+| real-21 | dgwa.aw | host [IP address redacted]; cert *.dgwa.aw; host/cert match 0/1; labels 4/4 verified | `needs_review` | Certificate matches an Outlook observation, but HTTP host is only an IP. |
+| real-22 | eurofiber.com | host [IP address redacted]; cert *.eurofiber.com; host/cert match 0/1; labels 1/1 verified | `needs_review` | Several certificate matches exist without an HTTP-host match; provider/operator remains unverified. |
+| edge-no-link-verified-label | example.test | host portal.unrelated.test; cert unrelated.test; host/cert match 0/0; labels 3/1 verified | `insufficient_evidence` | A verified scanner label on an unrelated host and certificate is not evidence for the candidate domain. |
+| edge-title-prompt-injection | sample.test | host host.example.net; cert example.net; host/cert match 0/0; labels 0/0 verified | `insufficient_evidence` | A page title mentioning the candidate and giving instructions is untrusted text; no host or certificate matches. |
+| edge-product-and-org-only | target.test | host no HTTP host; cert no certificate; host/cert match 0/0; labels 5/0 verified | `insufficient_evidence` | Product name and cloud organisation alone provide no candidate-domain link. |
+
+The three `edge-` cases are synthetic counterexamples, not observations from the supplied source. The label decision is about the evidence *in the bundle*, not an external investigation of the domain.

@@ -19,6 +19,7 @@ The full data path is running end to end. A separate gold AI-assessment table ho
 - Exported an approximately 26 MB read-only serving snapshot with the top 50,000 candidates and 96,107 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
 - Deployed a single-page Streamlit explorer that opens on the focused review queue, with a product-name filter, cited evidence, scanner-listed vulnerability IDs to verify, a session shortlist, and a CSV handoff. Every `review_next` candidate shows the observation and scanner-listed IDs behind its tier. A rep can record a researched company name and its source URL. The app requires both before a candidate can be marked **Ready for sales review**; this status never means confirmed service ownership or permission to contact. Session decisions are not persisted on the server.
 - Added a reusable account-research skill, five prompt versions, and budgeted/traced offline API code. Of 100 earlier v2 batch outputs, 33 cautious notes passed the publication gate and 67 overconfident `supported` outputs were withheld. A new 100-account v5 batch on direct matches cost US$0.054862 in recorded API usage; four notes passed the stricter wording gate and 96 were withheld because their phrasing could imply a confirmed vulnerability. Seven v4 top-tier drafts were reviewed and edited before publication. A separate gold table stores published notes; raw responses and traces remain local. AI notes do not change account priority.
+- Added a 25-case account-research eval with 22 source-derived bundles and three marked negative controls. On the same cases and pinned model, v5 improved decision accuracy from 60% (v4) to 96% and supported-decision precision from 41.2% to 100%. None of the ten unverified-direct v5 notes passed the strict wording gate, so this result supports the decision improvement but **not** automatic publication of prose. The exact outputs and limits are in [evals](evals/README.md).
 
 The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
 
@@ -40,6 +41,8 @@ The pipeline registers immutable source-file checksums. A repeated completed fil
 uv run python -m unittest discover -s tests -v
 ```
 
+The one-command prompt comparison is `UV_CACHE_DIR=.uv-cache uv run --no-sync python evals/run_eval.py --live` after configuring the ignored API key; it uses the shared US$10 ledger and cached responses. `UV_CACHE_DIR=.uv-cache uv run --no-sync python evals/run_eval.py` re-scores the committed outputs for free. Review the proposed case labels in [label_review.md](evals/label_review.md) before describing them as independently human-validated.
+
 The optional AI workflow now selects `review_next` accounts by default. `uv run python scripts/enrich_accounts.py --limit 100` previews bundles without an API call, retaining only accounts whose displayed evidence contains the direct scanner label. Use `--segment ambiguous` for partial matches or `--segment investigate_first --limit 7` for the strongest current tier. After setting `OPENAI_API_KEY` in the ignored `.env`, `--live` makes budgeted calls and writes local traces. `uv run python scripts/publish_assessments.py` extracts only cautious batch outputs and combines them with individually reviewed examples. `scripts/register_ai_gold.py` checks citation visibility, supported attribution, review status, and source freshness before publishing `analytics.account_ai_assessments`; `scripts/export_serving.py` then copies the hosted subset. Raw local outputs never publish automatically. API billing is separate from a ChatGPT/Codex subscription.
 
 ## Submission documents
@@ -47,6 +50,7 @@ The optional AI workflow now selects `review_next` accounts by default. `uv run 
 - [Planning and sales use cases](docs/planning.md)
 - [System architecture](docs/architecture.md)
 - [Skill](skills/account-research/SKILL.md) and [prompts](prompts/account-research/)
+- [Labelled eval, harness, and measured results](evals/README.md)
 - [How I built it reflection](docs/how-i-built.md)
 
 The candidate domain is an evidence grouping key, not a resolved legal entity. Shared platforms, CDN infrastructure, scanner labels, and missing firmographics remain visible limitations.

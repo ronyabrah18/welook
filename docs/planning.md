@@ -1,6 +1,6 @@
 # Sales intelligence prototype: planning draft
 
-Status: updated 25 September 2026 after full-data ingestion and account modelling. Target submission: 27 September 2026. This records product hypotheses and implementation choices, not validated sales outcomes. The [architecture](architecture.md) tracks current implementation status.
+Status: updated 26 September 2026 after full-data ingestion, account modelling, and offline AI evaluation. Target submission: 28 September 2026. This records product hypotheses and implementation choices, not validated sales outcomes. The [architecture](architecture.md) tracks current implementation status.
 
 ## User and product hypothesis
 
@@ -58,6 +58,7 @@ The offline LLM feature remains advisory. The app's "AI notes" filter shows 33 g
 - Each LLM call logs request, response, model, prompt version, latency, token usage, calculated cost, decision, errors, and evidence references. Treat website text as untrusted data, never instructions.
 - Cache results by evidence hash, prompt version, and model. Call the LLM for shortlisted accounts, not all 11.8 million observations.
 - Cost model: calls = new/changed accounts per run × runs per month; cost = calls × (input tokens × input price + output tokens × output price) / 1,000,000. Include retry budgets and enforce a spend ceiling.
+- A 25-case curated eval compares v4 and v5 on the same evidence bundles with the pinned model. The harness reports decision precision/recall, citation agreement, and the publication wording gate. See [the eval report](../evals/results.md); the cases are a deliberately challenging sample, not a sales-outcome measure.
 
 ## Scope and limitations
 
@@ -67,9 +68,9 @@ No active scanning, automated email sending, CRM integration, model training, or
 
 ## Delivery and next decisions
 
-The submitted scope is a hosted app; source repo with a skill and prompts; this planning document; architecture and cost documentation; and a half-to-one-page development reflection. Optional walkthrough at most five minutes.
+The submitted scope is a hosted app; source repo with a skill, prompts, a labelled eval and one-command comparison; this planning document; architecture and cost documentation; and a half-to-one-page development reflection. Optional walkthrough at most five minutes.
 
-Before using AI decisions to advance accounts toward outreach, confirm the operator and evidence with a person. The take-home API ceiling is US$10 total; 166 completed local calls have a calculated US$0.054025 cost according to the ledger. A separate failed-connectivity batch has US$0.138219 in conservative reservations, not confirmed charges.
+Before using AI decisions to advance accounts toward outreach, confirm the operator and evidence with a person. The take-home API ceiling is US$10 total; 313 completed local calls have a calculated US$0.132145 cost according to the ledger. Another 102 failed attempts carry US$0.141941 in conservative reservations, not confirmed charges. After IP-literal redaction, the final 25-case v4/v5 comparison reused 36 cached predictions and required 14 new completed calls (US$0.006953).
 
 ## Data-platform emphasis
 

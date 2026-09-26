@@ -1,0 +1,185 @@
+{
+  "run_at_utc": "2026-09-26T14:59:24.243188+00:00",
+  "model": "gpt-4.1-mini-2025-04-14",
+  "case_count": 25,
+  "case_set_sha256": "b111070ec5ffb46aab602e31dac41b8f976bdbdf6eb062e545af02fc73140c57",
+  "label_counts": {
+    "supported": 7,
+    "needs_review": 15,
+    "insufficient_evidence": 3
+  },
+  "origin_counts": {
+    "real_source_bundle": 22,
+    "synthetic_counterexample": 3
+  },
+  "prompt_versions": [
+    "v4",
+    "v5"
+  ],
+  "prompt_sha256": {
+    "v4": "b8cacd101baf9c5fb78311b0bf9076772dee54bc6789a171e263e5dde2517def",
+    "v5": "9bf9ddd4557c81a6b6ac16977c4775c75ffe4162a50d1d51b011021ceb17e021"
+  },
+  "metrics": {
+    "v4": {
+      "cases": 25,
+      "completed": 25,
+      "accuracy": 0.6,
+      "macro_f1": 0.6944444444444445,
+      "per_class": {
+        "supported": {
+          "support": 7,
+          "precision": 0.4117647058823529,
+          "recall": 1.0,
+          "f1": 0.5833333333333334,
+          "tp": 7,
+          "fp": 10,
+          "fn": 0
+        },
+        "needs_review": {
+          "support": 15,
+          "precision": 1.0,
+          "recall": 0.3333333333333333,
+          "f1": 0.5,
+          "tp": 5,
+          "fp": 0,
+          "fn": 10
+        },
+        "insufficient_evidence": {
+          "support": 3,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "tp": 3,
+          "fp": 0,
+          "fn": 0
+        }
+      },
+      "citation_validity_rate": 1.0,
+      "labelled_anchor_citation_rate": 1.0,
+      "direct_unverified_wording_gate_rate": 0.0,
+      "confusion": {
+        "supported": {
+          "supported": 7
+        },
+        "needs_review": {
+          "supported": 10,
+          "needs_review": 5
+        },
+        "insufficient_evidence": {
+          "insufficient_evidence": 3
+        }
+      },
+      "errors": [
+        {
+          "case_id": "real-08",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-09",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-10",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-11",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-12",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-13",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-14",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-15",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-16",
+          "expected": "needs_review",
+          "predicted": "supported"
+        },
+        {
+          "case_id": "real-17",
+          "expected": "needs_review",
+          "predicted": "supported"
+        }
+      ]
+    },
+    "v5": {
+      "cases": 25,
+      "completed": 25,
+      "accuracy": 0.96,
+      "macro_f1": 0.9225806451612902,
+      "per_class": {
+        "supported": {
+          "support": 7,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "tp": 7,
+          "fp": 0,
+          "fn": 0
+        },
+        "needs_review": {
+          "support": 15,
+          "precision": 0.9375,
+          "recall": 1.0,
+          "f1": 0.967741935483871,
+          "tp": 15,
+          "fp": 1,
+          "fn": 0
+        },
+        "insufficient_evidence": {
+          "support": 3,
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "tp": 2,
+          "fp": 0,
+          "fn": 1
+        }
+      },
+      "citation_validity_rate": 1.0,
+      "labelled_anchor_citation_rate": 1.0,
+      "direct_unverified_wording_gate_rate": 0.0,
+      "confusion": {
+        "supported": {
+          "supported": 7
+        },
+        "needs_review": {
+          "needs_review": 15
+        },
+        "insufficient_evidence": {
+          "insufficient_evidence": 2,
+          "needs_review": 1
+        }
+      },
+      "errors": [
+        {
+          "case_id": "edge-product-and-org-only",
+          "expected": "insufficient_evidence",
+          "predicted": "needs_review"
+        }
+      ]
+    }
+  },
+  "delta_macro_f1": 0.2281362007168457
+}
