@@ -3,12 +3,24 @@
 import unittest
 import json
 
+import duckdb
+
 from streamlit.testing.v1 import AppTest
 
 from scripts.ingest_full import ROOT
 
 
 class AppFlowTest(unittest.TestCase):
+    def test_every_investigate_first_domain_has_reviewed_note(self):
+        with duckdb.connect(str(ROOT / "app" / "data" / "welook_serving.duckdb"), read_only=True) as con:
+            priority, with_note = con.execute("""
+                SELECT count(*), count(assessment.candidate_domain)
+                FROM accounts account LEFT JOIN assessments assessment USING (candidate_domain)
+                WHERE account.priority_tier = 'investigate_first'
+            """).fetchone()
+        self.assertEqual(priority, 7)
+        self.assertEqual(with_note, priority)
+
     def test_ai_note_can_be_found_and_shortlisted(self):
         app = AppTest.from_file(str(ROOT / "app" / "app.py"), default_timeout=30).run()
         self.assertFalse(app.exception)

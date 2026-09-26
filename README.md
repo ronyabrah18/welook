@@ -17,7 +17,7 @@ flowchart LR
 
 [Download the editable Excalidraw diagram](docs/diagrams/welook-architecture.excalidraw) and open it in Excalidraw to move or annotate each component.
 
-The full data path is running end to end. A separate gold AI-assessment table holds 35 validated offline research notes: 33 guarded batch notes for ambiguous accounts and two individually reviewed examples. The serving snapshot copies only assessments for its hosted accounts. The rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
+The full data path is running end to end. A separate gold AI-assessment table holds 42 advisory offline research notes: 33 guarded batch notes for ambiguous accounts, two earlier reviewed examples, and seven individually reviewed `investigate_first` briefs. The serving snapshot copies only assessments for its hosted accounts. The rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
 
 ## What has been built
 
@@ -25,7 +25,7 @@ The full data path is running end to end. A separate gold AI-assessment table ho
 - Built 9,334,905 distinct domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. The final account model and its four dbt tests passed against the full-data warehouse. The `investigate_first` rule requires a direct match and scanner-verified association on the same observation: 7 candidates qualify. Another 28 domains have a verified label only on a different, indirectly linked observation and stay in research. Login/admin cases without direct verified evidence also stay in research.
 - Exported an approximately 22 MB read-only serving snapshot with the top 50,000 candidates and 96,107 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
 - Deployed a single-page Streamlit candidate explorer with research and AI-note views as filters, an evidence-backed account brief, a session shortlist, and a cited CSV research export.
-- Added a reusable account-research skill, three prompt versions, and budgeted/traced offline API code. Of 100 v2 batch outputs, 33 cautious notes passed the publication gate and 67 overconfident `supported` outputs were withheld. A separate gold table stores the published research notes, while raw responses and traces remain local. AI notes are advisory and do not change account priority.
+- Added a reusable account-research skill, four prompt versions, and budgeted/traced offline API code. Of 100 v2 batch outputs, 33 cautious notes passed the publication gate and 67 overconfident `supported` outputs were withheld. Seven v4 top-tier drafts were reviewed and edited before publication to distinguish historical scanner labels from confirmed current vulnerabilities. A separate gold table stores the published research notes, while raw responses and traces remain local. AI notes are advisory and do not change account priority.
 
 The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
 

@@ -44,7 +44,7 @@ def publish(batch: Path, reviewed: Path, output: Path, legacy_source_sha256: str
             continue
         record = json.loads(line)
         version = record.get("prompt_version")
-        if version in ("v2", "v3") and record.get("status") in ("completed", "cache_hit"):
+        if version in ("v2", "v3", "v4") and record.get("status") in ("completed", "cache_hit"):
             domain = record["candidate_domain"]
             prior = latest.get(domain)
             if prior is None or (version, record["assessed_at_utc"]) > (

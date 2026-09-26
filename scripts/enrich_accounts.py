@@ -71,7 +71,7 @@ def main():
     parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "full.duckdb")
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--segment", choices=["ambiguous", "investigate_first"], default="ambiguous")
-    parser.add_argument("--prompt", choices=["v1", "v2", "v3"], default="v3")
+    parser.add_argument("--prompt", choices=["v1", "v2", "v3", "v4"], default="v4")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts" / "ai" / "assessments.jsonl")
     args = parser.parse_args()

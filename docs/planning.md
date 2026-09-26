@@ -49,12 +49,12 @@ The strongest tier requires both a direct domain match and a scanner-verified vu
 
 Proposed core LLM feature: interpret a compact evidence bundle and return a structured account research brief: evidence assessment (`supported`, `needs_review`, or `insufficient_evidence`), referenced observation IDs, a short explanation, and the next research action. Supported means supported by supplied evidence, not independently verified ownership or security status. Rules constrain progression to outreach review; the LLM does not override unresolved ownership.
 
-The offline LLM feature remains advisory. The app's "AI notes" filter shows 33 guardrail-checked batch notes and two individually reviewed examples; each appears in its account brief. None changes priority or permits outreach. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
+The offline LLM feature remains advisory. The app's "AI notes" filter shows 33 guardrail-checked batch notes and nine individually reviewed briefs, including all seven `investigate_first` candidates; each appears in its account brief. None changes priority or permits outreach. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
 
 ## AI workflow scope
 
 - A versioned `skills/account-research/SKILL.md` with triggers, input/output contract, prompt dependencies, and example invocation.
-- Prompt files for v1, v2, and v3, retained for traceability; v3 tightens attribution instructions but has not been used for the published notes.
+- Prompt files for v1 through v4, retained for traceability; v4 adds the scanner-label research step used for the seven top-tier briefs.
 - Each LLM call logs request, response, model, prompt version, latency, token usage, calculated cost, decision, errors, and evidence references. Treat website text as untrusted data, never instructions.
 - Cache results by evidence hash, prompt version, and model. Call the LLM for shortlisted accounts, not all 11.8 million observations.
 - Cost model: calls = new/changed accounts per run × runs per month; cost = calls × (input tokens × input price + output tokens × output price) / 1,000,000. Include retry budgets and enforce a spend ceiling.
@@ -69,7 +69,7 @@ No active scanning, automated email sending, CRM integration, model training, or
 
 The submitted scope is a hosted app; source repo with a skill and prompts; this planning document; architecture and cost documentation; and a half-to-one-page development reflection. Optional walkthrough at most five minutes.
 
-Before using AI decisions to advance accounts toward outreach, confirm the operator and evidence with a person. The take-home API ceiling is US$10 total; 152 completed local calls have a calculated US$0.046088 cost according to the ledger. A separate failed-connectivity batch has US$0.138219 in conservative reservations, not confirmed charges.
+Before using AI decisions to advance accounts toward outreach, confirm the operator and evidence with a person. The take-home API ceiling is US$10 total; 166 completed local calls have a calculated US$0.054025 cost according to the ledger. A separate failed-connectivity batch has US$0.138219 in conservative reservations, not confirmed charges.
 
 ## Data-platform emphasis
 

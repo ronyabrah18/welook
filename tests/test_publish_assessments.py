@@ -18,7 +18,7 @@ class PublishAssessmentsTest(unittest.TestCase):
                 {"candidate_domain": "a.example", "prompt_version": "v2", "status": "completed",
                  "assessed_at_utc": "2026-09-25T00:00:00+00:00", "model": "test-model",
                  "result": {"decision": "supported", "evidence_ids": ["source-line-1"]}},
-                {"candidate_domain": "a.example", "prompt_version": "v3", "status": "completed",
+                {"candidate_domain": "a.example", "prompt_version": "v4", "status": "completed",
                  "assessed_at_utc": "2026-09-26T00:00:00+00:00", "model": "test-model",
                  "source_registry_hash": "new-source-set",
                  "result": {"decision": "needs_review", "evidence_ids": ["source-record-new"]}},
@@ -27,7 +27,7 @@ class PublishAssessmentsTest(unittest.TestCase):
             report = publish(batch, reviewed, output, "a" * 64)
             published = json.loads(output.read_text().strip())
             self.assertEqual(report["published"], 1)
-            self.assertEqual(published["prompt_version"], "v3")
+            self.assertEqual(published["prompt_version"], "v4")
             self.assertEqual(published["source_registry_hash"], "new-source-set")
 
     def test_only_cautious_batch_results_are_selected(self):
