@@ -8,7 +8,7 @@ WeLook turns the supplied internet-service observations into an evidence-backed 
 
 ![WeLook architecture: full-source ingestion, silver quarantine, local warehouse, offline AI assessment, and hosted app](docs/diagrams/architecture_diagram.png)
 
-The diagram shows the **current implementation**, including the separate quarantine side output from silver validation, where each layer lives, and how counts change. The [editable Excalidraw file](docs/diagrams/welook-architecture.excalidraw) shows the same flow in a compact layout. Regenerate the PNG from the serving report with [render_architecture_diagram.py](scripts/render_architecture_diagram.py).
+The diagram shows the **current implementation**, including the separate quarantine side output from silver validation, where each layer lives, and how counts change. Regenerate it from the serving report with [render_architecture_diagram.py](scripts/render_architecture_diagram.py).
 
 The full data path is running end to end. A separate gold AI-assessment table holds 42 advisory offline research notes: 33 guarded batch notes for ambiguous accounts, two earlier reviewed examples, and seven individually reviewed `investigate_first` briefs. The serving snapshot copies only assessments for its hosted accounts. The rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
 

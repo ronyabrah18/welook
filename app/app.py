@@ -246,4 +246,8 @@ with st.expander("How to read the evidence"):
     """)
     st.write("This is one historical scan snapshot. It cannot establish current exposure, "
              "buying intent, company territory, legal identity, or a decision-maker.")
+with st.expander("How WeLook is built"):
+    st.image(str(Path(__file__).resolve().parents[1] / "docs" / "diagrams" / "architecture_diagram.png"),
+             caption="Full-source ingestion, validation and quarantine, gold models, offline AI assessment, and the hosted research app.",
+             width="stretch")
 st.caption("WeLook · Firmable take-home prototype · Evidence-backed research, not automated outreach.")
