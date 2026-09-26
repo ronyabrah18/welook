@@ -10,14 +10,17 @@ import duckdb
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def validate_reviewed_assessments(source: duckdb.DuckDBPyConnection, path: Path) -> None:
+def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path) -> None:
     """Fail the export if a published AI claim lacks visible source evidence."""
     for line_number, line in enumerate(path.read_text().splitlines(), 1):
         if not line.strip():
             continue
         record = json.loads(line)
-        if record.get("review_status") != "reviewed_for_demo":
-            continue
+        review_status = record.get("review_status")
+        if review_status not in {"reviewed_for_demo", "guardrail_checked"}:
+            raise ValueError(f"Unknown publication status on line {line_number}")
+        if record.get("status") not in {"completed", "cache_hit"}:
+            raise ValueError(f"Unsuccessful AI result on line {line_number}")
         domain = record["candidate_domain"]
         result = record["result"]
         decision = result["decision"]
@@ -29,11 +32,21 @@ def validate_reviewed_assessments(source: duckdb.DuckDBPyConnection, path: Path)
             raise ValueError(f"Invalid reviewed assessment on line {line_number}: account or decision")
         if decision == "supported" and account[0] == "provider_only":
             raise ValueError(f"Provider-only account cannot receive supported AI claim: {domain}")
-        available_ids = {f"source-line-{row[0]}" for row in source.execute(
-            "SELECT source_line FROM serving.evidence WHERE candidate_domain = ?", [domain]
+        if review_status == "guardrail_checked" and decision == "supported":
+            raise ValueError(f"Batch-supported claim needs individual review: {domain}")
+        evidence = {f"source-line-{row[0]}": (row[1], row[2]) for row in source.execute(
+            "SELECT source_line, http_domain_match, cert_domain_match FROM serving.evidence WHERE candidate_domain = ?", [domain]
         ).fetchall()}
-        if not evidence_ids or not set(evidence_ids).issubset(available_ids):
+        if not evidence_ids or not set(evidence_ids).issubset(evidence):
             raise ValueError(f"Reviewed assessment cites evidence absent from serving snapshot: {domain}")
+        if decision == "supported" and not any(
+            evidence[evidence_id] == (True, True) for evidence_id in evidence_ids
+        ):
+            raise ValueError(f"Supported claim lacks a cited double domain match: {domain}")
+
+
+# Keep the old import name for callers using the earlier reviewed-only gate.
+validate_reviewed_assessments = validate_published_assessments
 
 
 def main():
@@ -41,7 +54,7 @@ def main():
     parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "sales.duckdb")
     parser.add_argument("--output", type=Path, default=ROOT / "app" / "data" / "welook_serving.duckdb")
     parser.add_argument("--limit", type=int, default=50_000)
-    parser.add_argument("--assessments", type=Path, default=ROOT / "app" / "data" / "reviewed_assessments.jsonl")
+    parser.add_argument("--assessments", type=Path, default=ROOT / "app" / "data" / "published_assessments.jsonl")
     args = parser.parse_args()
     if args.limit < 1:
         parser.error("--limit must be positive")
@@ -87,18 +100,18 @@ def main():
             WHERE rank_in_account <= 3
         """)
         if args.assessments.exists() and args.assessments.stat().st_size:
-            validate_reviewed_assessments(source, args.assessments)
+            validate_published_assessments(source, args.assessments)
             assessment_path = str(args.assessments.resolve()).replace("'", "''")
             source.execute(f"""
                 CREATE TABLE serving.assessments AS
                 SELECT candidate_domain, result.decision AS decision,
                        result.reason AS reason, result.next_action AS next_action,
                        result.evidence_ids AS evidence_ids, prompt_version, model,
-                       assessed_at_utc
+                       assessed_at_utc, review_status
                 FROM read_json_auto('{assessment_path}', format='newline_delimited') ai
                 JOIN serving.accounts a USING (candidate_domain)
                 WHERE status IN ('completed', 'cache_hit')
-                  AND review_status = 'reviewed_for_demo'
+                  AND review_status IN ('reviewed_for_demo', 'guardrail_checked')
                   AND result.decision IS NOT NULL
                   AND NOT (result.decision = 'supported' AND a.attribution_status = 'provider_only')
                 QUALIFY row_number() OVER (PARTITION BY candidate_domain
@@ -108,7 +121,7 @@ def main():
             source.execute("""CREATE TABLE serving.assessments (
                 candidate_domain VARCHAR, decision VARCHAR, reason VARCHAR,
                 next_action VARCHAR, evidence_ids VARCHAR[], prompt_version VARCHAR,
-                model VARCHAR, assessed_at_utc VARCHAR)""")
+                model VARCHAR, assessed_at_utc VARCHAR, review_status VARCHAR)""")
         selected = source.execute("SELECT count(*) FROM serving.accounts").fetchone()[0]
         evidence = source.execute("SELECT count(*) FROM serving.evidence").fetchone()[0]
         ai_count = source.execute("SELECT count(*) FROM serving.assessments").fetchone()[0]

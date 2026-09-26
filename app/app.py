@@ -154,7 +154,7 @@ with prospects:
                      "before looking for a contact. Keep this in the research queue until attribution is clear.")
         if len(assessment):
             ai = assessment.iloc[0]
-            st.info(f"AI research suggestion ({ai.prompt_version}, {ai.model}): "
+            st.info(f"AI research suggestion ({ai.prompt_version}, {ai.model}; {ai.review_status}): "
                     f"{ai.decision}. {ai.reason} Next: {ai.next_action}")
             st.caption("This suggestion does not change the rule-derived priority or clear the account for outreach. "
                        "Verify the service operator and any technical claim independently.")
@@ -177,15 +177,19 @@ with research:
     st.subheader("Accounts needing verification")
     st.write("These have a technical cue but only a partial account match. Confirm who operates the service before contacting anyone.")
     review = account_rows("", ["research", "low_evidence"], ["partial", "unresolved", "provider_only"], 100)
+    covered = int((review["ai_decision"] != "rule_only").sum())
+    st.caption(f"Offline AI note available for {covered} of these {len(review)} displayed research accounts. "
+               "The remaining rows use rules only; AI notes do not verify ownership or change rank.")
     st.dataframe(review, hide_index=True, width="stretch")
 
 with ai_examples:
-    st.subheader("Offline account-research examples")
-    st.write("A small model reviews selected service evidence and suggests whether it can be linked to a "
-             "candidate domain. These two checked examples show the output in the product; they are "
-             "not a measured quality evaluation or permission to contact an account.")
+    st.subheader("Offline account-research notes")
+    st.write("A small model reviews up to three service observations per selected domain and suggests "
+             "what to verify next. Batch notes passed a deterministic evidence gate; only notes marked "
+             "reviewed_for_demo received individual review. These are not a measured quality evaluation "
+             "or permission to contact an account.")
     examples = query(
-        "SELECT candidate_domain, decision, reason, next_action, prompt_version "
+        "SELECT candidate_domain, decision, reason, next_action, prompt_version, review_status "
         "FROM assessments ORDER BY candidate_domain"
     )
     if len(examples):
@@ -194,13 +198,13 @@ with ai_examples:
         _, example_evidence, example_assessment = account_detail(example_domain)
         example = example_assessment.iloc[0]
         st.write(f"**Model decision:** {example.decision} · **Prompt:** {example.prompt_version} · "
-                 f"**Model:** {example.model}")
+                 f"**Model:** {example.model} · **Publication check:** {example.review_status}")
         st.write(f"**Why:** {example.reason}")
         st.write(f"**Next research step:** {example.next_action}")
         st.caption("Cited source IDs: " + ", ".join(example.evidence_ids))
         st.dataframe(example_evidence, hide_index=True, width="stretch")
     else:
-        st.info("No reviewed AI examples have been published in this snapshot.")
+        st.info("No AI research notes have been published in this snapshot.")
 
 with saved:
     st.subheader("Session shortlist")
@@ -227,4 +231,4 @@ with method:
     - **Vulnerability association:** A label supplied with the observation, not proof that the named business is affected.
     """)
     st.write("The source is one historical snapshot. We cannot infer a new exposure, live security posture, purchase intent, company territory, or a named decision-maker from it.")
-    st.caption("WeLook · Firmable take-home prototype · Rule-derived queue with advisory offline AI examples.")
+    st.caption("WeLook · Firmable take-home prototype · Rule-derived queue with advisory offline AI research notes.")

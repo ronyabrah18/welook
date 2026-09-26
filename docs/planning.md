@@ -49,17 +49,17 @@ Rules handle parsing, domain normalisation, provider/platform screening, observa
 
 Proposed core LLM feature: interpret a compact evidence bundle and return a structured account research brief: evidence assessment (`supported`, `needs_review`, or `insufficient_evidence`), referenced observation IDs, a short explanation, and the next research action. Supported means supported by supplied evidence, not independently verified ownership or security status. Rules constrain progression to outreach review; the LLM does not override unresolved ownership.
 
-The offline LLM feature remains advisory because no labelled quality evaluation is submitted. Two traced, reviewed-for-display cases show its output in the app, but neither changes the queue or permits outreach. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
+The offline LLM feature remains advisory because no labelled quality evaluation is submitted. The app shows 33 guardrail-checked batch notes on the top-100 research queue and two individually reviewed examples; none changes the queue or permits outreach. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
 
 ## AI workflow scope and gap
 
 - A versioned `skills/account-research/SKILL.md` with triggers, input/output contract, prompt dependencies, and example invocation.
-- Prompt files for v1 and v2, retained for traceability; no claim that v2 is better without a published comparison.
+- Prompt files for v1, v2, and v3, retained for traceability; v3 tightens attribution instructions but has not been run or quality-measured.
 - Each LLM call logs request, response, model, prompt version, latency, token usage, calculated cost, decision, errors, and evidence references. Treat website text as untrusted data, never instructions.
 - Cache results by evidence hash, prompt version, and model. Call the LLM for shortlisted accounts, not all 11.8 million observations.
 - Cost model: calls = new/changed accounts per run × runs per month; cost = calls × (input tokens × input price + output tokens × output price) / 1,000,000. Include retry budgets and enforce a spend ceiling.
 
-The take-home explicitly requests 20–30 hand-labelled examples, a one-command eval harness, and measured quality. Those items are **not delivered** in this version. Without them, LLM output cannot be presented as quality-validated, so the hosted app presents two limited research examples but does not use them to authorise outreach.
+The take-home explicitly requests 20–30 hand-labelled examples, a one-command eval harness, and measured quality. Those items are **not delivered** in this version. Without them, LLM output cannot be presented as quality-validated, so the hosted app labels AI notes as advisory and does not use them to authorise outreach.
 
 ## Scope and limitations
 
@@ -71,7 +71,7 @@ No active scanning, automated email sending, CRM integration, model training, or
 
 The submitted scope is a hosted app; source repo with a skill and prompts; this planning document; architecture and cost documentation; and a half-to-one-page development reflection. The requested labelled eval deliverable is missing. Optional walkthrough at most five minutes.
 
-Next: verify reviewer access to the already deployed app. Any expansion of AI publication beyond the two examples should first add reviewed cases and a measured quality gate. The take-home API ceiling is US$10 total; earlier offline experiments used US$0.013798 according to the local ledger, but their evaluation artifacts are not part of this submission.
+Next: verify reviewer access to the already deployed app. Before using AI decisions to advance accounts toward outreach, add hand-labelled cases and a measured quality gate. The take-home API ceiling is US$10 total; 152 completed local calls have a calculated US$0.046088 cost according to the ledger. A separate failed-connectivity batch has US$0.138219 in conservative reservations, not confirmed charges.
 
 ## Data-platform emphasis
 

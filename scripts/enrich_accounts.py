@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 
 import duckdb
+from openai import APIConnectionError, AuthenticationError, RateLimitError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,8 +26,7 @@ def selected_bundles(db: Path, limit: int) -> list[dict]:
             WITH selected AS (
                 SELECT candidate_domain FROM analytics.fct_accounts
                 WHERE priority_tier = 'research' AND attribution_status = 'partial'
-                ORDER BY investigation_score DESC, vulnerability_association_count DESC,
-                         candidate_domain LIMIT ?
+                ORDER BY investigation_score DESC, candidate_domain LIMIT ?
             ), ranked AS (
                 SELECT e.*, row_number() OVER (
                     PARTITION BY e.candidate_domain
@@ -59,7 +59,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "full.duckdb")
     parser.add_argument("--limit", type=int, default=100)
-    parser.add_argument("--prompt", choices=["v1", "v2"], default="v2")
+    parser.add_argument("--prompt", choices=["v1", "v2", "v3"], default="v3")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts" / "ai" / "assessments.jsonl")
     args = parser.parse_args()
@@ -78,6 +78,8 @@ def main():
     assessor = BudgetedAssessor()
     with args.output.open("a") as out:
         for index, bundle in enumerate(bundles, 1):
+            fatal_error = False
+            fatal_error_name = ""
             try:
                 assessed = assessor.assess(bundle, args.prompt)
                 record = {"candidate_domain": bundle["candidate_domain"],
@@ -90,9 +92,14 @@ def main():
                           "assessed_at_utc": datetime.now(timezone.utc).isoformat(),
                           "prompt_version": args.prompt, "model": assessor.model,
                           "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+                fatal_error = isinstance(exc, (APIConnectionError, AuthenticationError, RateLimitError))
+                fatal_error = fatal_error or "API cost ceiling reached" in str(exc)
+                fatal_error_name = type(exc).__name__
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
             out.flush()
             print(f"{index}/{len(bundles)} {record['status']}", flush=True)
+            if fatal_error:
+                raise SystemExit(f"Stopping AI batch after {fatal_error_name}; check connectivity, API access, or budget")
 
 
 if __name__ == "__main__":
