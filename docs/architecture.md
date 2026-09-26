@@ -10,7 +10,7 @@ The supplied snapshot is the core dataset: **11,768,718 service observations** i
 
 ## Data flow
 
-An [editable Excalidraw version](diagrams/welook-architecture.excalidraw) is available for walkthroughs.
+The [architecture PNG](diagrams/architecture_diagram.png) shows the actual deployed components and record-count reductions. An [editable Excalidraw version](diagrams/welook-architecture.excalidraw) is available for walkthroughs.
 
 ```mermaid
 flowchart LR
