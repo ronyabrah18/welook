@@ -207,7 +207,21 @@ if len(matches):
         st.markdown("**Selected source evidence**")
         st.caption("Up to three observations are shown. Scanner labels and domain matches are evidence, "
                    "not proof that the business is affected.")
-        st.dataframe(evidence, hide_index=True, width="stretch")
+        compact_evidence = evidence.assign(
+            service=evidence["ip_address"].astype(str) + ":" + evidence["port"].astype(str),
+            domain_link=[
+                "Host + certificate" if host and cert else "One field" if host or cert else "Unresolved"
+                for host, cert in zip(evidence["http_domain_match"], evidence["cert_domain_match"])
+            ],
+        )[["observed_at", "service", "domain_link", "verified_vulnerability_count",
+            "product", "http_title"]].rename(columns={
+                "observed_at": "Observed", "service": "Service", "domain_link": "Domain link",
+                "verified_vulnerability_count": "Verified labels", "product": "Product",
+                "http_title": "Page title",
+            })
+        st.dataframe(compact_evidence, hide_index=True, width="stretch")
+        with st.expander("Full source fields and evidence IDs"):
+            st.dataframe(evidence, hide_index=True, width="stretch")
 else:
     st.info("No candidate domains match these filters. Try a broader view or signal.")
 
