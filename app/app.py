@@ -46,7 +46,8 @@ def account_rows(search: str, tiers: list[str], attribution: list[str], limit: i
     params.append(limit)
     return query(
         "SELECT a.candidate_domain, a.priority_tier, a.attribution_status, a.investigation_score, "
-        "a.observation_count, a.vulnerability_association_count, a.last_observed_at, "
+        "a.observation_count, a.vulnerability_association_count, "
+        "a.directly_supported_verified_observation_count AS verified_direct_matches, a.last_observed_at, "
         "coalesce(assessment.decision, 'rule_only') AS ai_decision "
         "FROM accounts a LEFT JOIN assessments assessment USING (candidate_domain) WHERE " + " AND ".join(conditions) +
         " ORDER BY CASE a.priority_tier WHEN 'investigate_first' THEN 0 "
@@ -76,6 +77,7 @@ def shortlist_csv(domains: list[str]) -> str:
     rows = query(
         "SELECT candidate_domain, priority_tier, attribution_status, investigation_score, "
         "observation_count, vulnerability_association_count, verified_vulnerability_association_count, "
+        "directly_supported_verified_observation_count, "
         "last_observed_at, next_action "
         f"FROM accounts WHERE candidate_domain IN ({placeholders}) ORDER BY investigation_score DESC",
         domains,
@@ -110,6 +112,8 @@ st.caption(
     f"{int(info.ai_assessed_accounts):,} offline AI assessments · "
     "Technical evidence is a research signal, not a confirmed vulnerability or buying intent."
 )
+st.warning("Candidate domains are not verified organisations. Confirm the business and service operator "
+           "before using any account for outreach.")
 if int(info.hosted_accounts) < int(info.candidate_accounts):
     st.info("This hosted view shows a ranked subset. The local pipeline processed the full source; "
             "the account count above shows the complete candidate universe.")
@@ -118,7 +122,7 @@ if int(info.stale_ai_notes_skipped):
             "The account queue remains rule-based until those notes are reassessed.")
 
 prospects, research, ai_examples, saved, method = st.tabs(
-    ["Prospect queue", "Research queue", "AI research examples", "Shortlist & export", "How to read this"]
+    ["Candidate queue", "Research queue", "AI research examples", "Shortlist & export", "How to read this"]
 )
 
 with prospects:
@@ -135,7 +139,9 @@ with prospects:
     signal = st.selectbox("Technical signal", ["Any signal", "Scanner-verified association",
                                                "Admin or login page", "Any vulnerability association"])
     matches = account_rows(search, tiers, attribution, signal=signal, direct_only=direct_only)
-    st.caption(f"Showing {len(matches):,} highest-ranked matching accounts. Search by domain to narrow further.")
+    st.caption(f"Showing {len(matches):,} highest-ranked candidate domains. Search by domain to narrow further. "
+               "'Investigate first' requires a direct domain match and scanner-verified association on the same observation; "
+               "an admin/login title alone stays in research.")
     st.dataframe(matches, hide_index=True, width="stretch")
     if len(matches):
         domain = st.selectbox("Inspect account evidence", matches["candidate_domain"].tolist())
@@ -214,8 +220,8 @@ with saved:
     st.caption("Saved only in this browser session. Download the CSV to keep your work.")
     if st.session_state.shortlist:
         st.write(", ".join(st.session_state.shortlist))
-        st.download_button("Download prospect brief CSV", shortlist_csv(st.session_state.shortlist),
-                           file_name="welook-prospect-brief.csv", mime="text/csv")
+        st.download_button("Download research brief CSV", shortlist_csv(st.session_state.shortlist),
+                           file_name="welook-research-brief.csv", mime="text/csv")
         remove = st.selectbox("Remove an account", st.session_state.shortlist)
         if st.button("Remove selected"):
             st.session_state.shortlist.remove(remove)
@@ -231,6 +237,8 @@ with method:
     - **Partial attribution:** One of those fields matches; the other is absent or different.
     - **Provider only:** The candidate domain is on a conservative infrastructure-provider list.
     - **Investigation score:** A transparent technical-research score, not a sales conversion probability.
+    - **Investigate first:** A direct domain match and scanner-verified vulnerability association on the same observation. This still does not confirm the business is affected.
+    - **Research:** A weaker technical signal or account match, including admin/login pages without scanner verification.
     - **Vulnerability association:** A label supplied with the observation, not proof that the named business is affected.
     """)
     st.write("The source is one historical snapshot. We cannot infer a new exposure, live security posture, purchase intent, company territory, or a named decision-maker from it.")

@@ -36,6 +36,7 @@ def main():
             CREATE TABLE serving.accounts AS
             SELECT candidate_domain, observation_count, supported_observation_count,
                    vulnerability_association_count, verified_vulnerability_association_count,
+                   directly_supported_verified_observation_count,
                    admin_or_login_observation_count,
                    first_observed_at, last_observed_at, investigation_score,
                    example_http_title, example_product, attribution_status,

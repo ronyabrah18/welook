@@ -35,7 +35,7 @@ Local supporting artifacts: `artifacts/full_scan/profile.json`, `artifacts/full_
 
 1. **Choose accounts to investigate.** Filter the hosted queue by candidate domain, investigation tier, attribution status, and technical signal. Dates remain visible in account detail. The source covers only a short snapshot window, so a recency filter would create false precision. Company territory, sector, and size are unknown; infrastructure country is shown only as observation evidence, never as a company-location filter.
 2. **Understand why an account appears.** Account detail shows observation references, timestamps, infrastructure provider versus candidate domain, technical signals, and contradictory fields. Do not transfer all observations on a shared IP to every domain associated with it.
-3. **Take the next useful action.** Save accounts in a session shortlist and export a prospect brief, or use the research queue when association is unclear. Account detail gives a provisional IT/security buyer role and an outreach-preparation step, but does not invent a named decision-maker or contact route. Drafting and sending email are outside this prototype.
+3. **Take the next useful action.** Save candidate domains in a session shortlist and export a research brief, or use the research queue when association is unclear. Account detail gives a provisional IT/security buyer role and an outreach-preparation step, but does not invent a named decision-maker or contact route. Confirm the legal business and service operator before outreach. Drafting and sending email are outside this prototype.
 
 ## Proposed screens
 
@@ -46,6 +46,8 @@ Local supporting artifacts: `artifacts/full_scan/profile.json`, `artifacts/full_
 ## Rule and LLM split
 
 Rules handle parsing, domain normalisation, provider/platform screening, observation deduplication, date calculations, deterministic signal extraction, filtering, and bounded priority calculations. Preserve original fields and source references. Rank distinct signal categories with caps so duplicated observations do not dominate. Weights remain explicit hypotheses until reviewed; no conversion-probability claims.
+
+The strongest tier requires both a direct domain match and a scanner-verified vulnerability association on the same observation. A login/admin page title by itself is a research cue, not an outreach trigger. A scanner-verified flag still requires checking whether the named business operates the service and whether the finding applies.
 
 Proposed core LLM feature: interpret a compact evidence bundle and return a structured account research brief: evidence assessment (`supported`, `needs_review`, or `insufficient_evidence`), referenced observation IDs, a short explanation, and the next research action. Supported means supported by supplied evidence, not independently verified ownership or security status. Rules constrain progression to outreach review; the LLM does not override unresolved ownership.
 
