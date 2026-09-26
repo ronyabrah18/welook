@@ -1,4 +1,4 @@
-"""Prepare or run a bounded offline LLM assessment for ambiguous accounts.
+"""Prepare or run a bounded offline LLM assessment for selected accounts.
 
 The default is a free dry run that writes selected evidence bundles. Add --live
 only after label review, API setup, and an explicit budget decision.
@@ -21,15 +21,21 @@ from welook.llm_client import BudgetedAssessor  # noqa: E402
 from welook.lineage import source_registry_hash  # noqa: E402
 
 
-def selected_bundles(db: Path, limit: int) -> list[dict]:
+def selected_bundles(db: Path, limit: int, segment: str = "ambiguous") -> list[dict]:
+    if segment not in {"ambiguous", "investigate_first"}:
+        raise ValueError(f"Unknown account segment: {segment}")
+    where_clause = (
+        "priority_tier = 'investigate_first'" if segment == "investigate_first"
+        else "priority_tier = 'research' AND attribution_status = 'partial'"
+    )
     with duckdb.connect(str(db), read_only=True) as con:
         registry_hash = source_registry_hash(row[0] for row in con.execute(
             "SELECT source_sha256 FROM raw.ingestion_manifest"
         ).fetchall())
-        rows = con.execute("""
+        rows = con.execute(f"""
             WITH selected AS (
                 SELECT candidate_domain FROM analytics.fct_accounts
-                WHERE priority_tier = 'research' AND attribution_status = 'partial'
+                WHERE {where_clause}
                 ORDER BY investigation_score DESC, candidate_domain LIMIT ?
             ), ranked AS (
                 SELECT e.*, row_number() OVER (
@@ -64,20 +70,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "full.duckdb")
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--segment", choices=["ambiguous", "investigate_first"], default="ambiguous")
     parser.add_argument("--prompt", choices=["v1", "v2", "v3"], default="v3")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts" / "ai" / "assessments.jsonl")
     args = parser.parse_args()
     if not 1 <= args.limit <= 1_000:
         parser.error("--limit must be 1–1000")
-    bundles = selected_bundles(args.db, args.limit)
+    bundles = selected_bundles(args.db, args.limit, args.segment)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if not args.live:
         planned = args.output.with_name("planned_bundles.jsonl")
         with planned.open("w") as out:
             for bundle in bundles:
                 out.write(json.dumps(bundle, ensure_ascii=False) + "\n")
-        print(json.dumps({"mode": "dry_run_no_api_calls", "planned_accounts": len(bundles),
+        print(json.dumps({"mode": "dry_run_no_api_calls", "segment": args.segment,
+                          "planned_accounts": len(bundles),
                           "output": str(planned)}))
         return
     assessor = BudgetedAssessor()

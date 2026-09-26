@@ -1,6 +1,7 @@
 """Check the hosted snapshot supports the salesperson's core research flow."""
 
 import unittest
+import json
 
 from streamlit.testing.v1 import AppTest
 
@@ -16,7 +17,8 @@ class AppFlowTest(unittest.TestCase):
         view = next(control for control in app.selectbox if control.label == "View")
         view.set_value("AI notes").run()
         self.assertFalse(app.exception)
-        self.assertEqual(len(app.dataframe[0].value), 35)
+        report = json.loads((ROOT / "app" / "data" / "serving_report.json").read_text())
+        self.assertEqual(len(app.dataframe[0].value), report["ai_assessed_accounts"])
         self.assertTrue(any("AI research note" in item.value for item in app.info))
 
         next(button for button in app.button if button.label == "Add to shortlist").click().run()

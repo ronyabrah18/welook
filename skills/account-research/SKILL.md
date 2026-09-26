@@ -1,6 +1,6 @@
 ---
 name: account-research
-description: Assess whether a WeLook candidate domain is supported by supplied service observations, and produce a grounded next research action. Use for selected ambiguous account-evidence bundles, not for raw-file ingestion or live vulnerability claims.
+description: Assess whether a WeLook candidate domain is supported by supplied service observations, and produce a grounded next research action. Use for selected ambiguous or investigate-first account-evidence bundles, not for raw-file ingestion or live vulnerability claims.
 ---
 
 # Account research · version 1.0.0
@@ -22,5 +22,7 @@ Example dry-run invocation from the repository root; this selects five bundles w
 ```bash
 uv run python scripts/enrich_accounts.py --limit 5 --prompt v3
 ```
+
+For the strongest rule-derived tier, use `uv run python scripts/enrich_accounts.py --segment investigate_first --limit 7 --prompt v3` to preview the current seven bundles. Run with `--live` only after the evidence-sharing and API budget have been approved. Review each result before adding it to the curated publication file; do not automatically publish `supported` batch outputs.
 
 For one bundle, a plausible input is `{"candidate_domain":"example.org","source_registry_hash":"snapshot-hash","evidence":[{"evidence_id":"source-record-abc123","source_line":42,"http_host":"portal.example.org","certificate_cn":"example.org","infrastructure_org":"Cloud provider","vulnerability_count":0}]}`. A valid result would cite `source-record-abc123`, describe that the host and certificate agree, and recommend verifying the service operator before outreach. Do not invent a named contact or assert that the provider is the customer. A new source file changes the registry hash, so the serving export withholds older notes until reassessment.
