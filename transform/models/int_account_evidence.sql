@@ -2,7 +2,7 @@
 
 -- Candidate domain is an evidence label, not a resolved legal company.
 with expanded as (
-    select o.source_record_id, o.source_line, o.observation_id, o.observed_at, o.ip_address,
+    select distinct o.source_record_id, o.source_line, o.observation_id, o.observed_at, o.ip_address,
            o.port, o.infrastructure_org, o.infrastructure_country, o.product,
            o.http_host, o.http_title, o.certificate_cn, o.vulnerability_count,
            o.verified_vulnerability_count,

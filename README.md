@@ -15,8 +15,8 @@ The full data path is running end to end. The serving snapshot includes 35 offli
 ## What has been built
 
 - Streamed the **entire 12.44 GB compressed source** into 656 bronze Parquet parts, then read those parts to build typed silver Parquet: 11,768,718 source, bronze, and accepted silver rows; zero rejected rows. The full v2 run took 3.4 minutes for bronze and 6.0 minutes for silver on a 48 GB laptop. Malformed records remain in bronze and are routed to a separate quarantine during silver validation.
-- Built 9,335,329 domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. All 14 dbt model/test steps passed on the full run.
-- Exported an approximately 21 MB read-only serving snapshot with the top 50,000 candidates and 96,113 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
+- Built 9,334,905 distinct domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. All 15 dbt model/test steps passed on the full run.
+- Exported an approximately 22 MB read-only serving snapshot with the top 50,000 candidates and 96,107 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
 - Deployed the Streamlit account queue, research queue, evidence detail, session shortlist, and CSV export; verified the hosted app starts against the full serving snapshot.
 - Added a reusable account-research skill, three prompt versions, and budgeted/traced offline API code. Of 100 v2 batch outputs, 33 cautious notes passed the publication gate and 67 overconfident `supported` outputs were withheld. A labelled evaluation set and prompt-quality results are **not included**, so the AI assessment is not presented as validated.
 
@@ -32,7 +32,7 @@ uv run python scripts/run_pipeline.py
 uv run streamlit run app/app.py
 ```
 
-The pipeline registers immutable source-file checksums. A repeated completed file skips both bronze and silver; a completed bronze run can build or retry silver without the landing file. Adding a second file appends its silver parts to the registered source and refreshes the derived dbt tables and serving snapshot. When a source is rebuilt with a newer schema, DuckDB registers only the latest complete version. Local fixtures exercise repeat loads, a second arrival, replay, and quarantine. A replacement snapshot or deletion requires a separate source contract.
+The pipeline registers immutable source-file checksums. A repeated completed file skips both bronze and silver; a completed bronze run can build or retry silver without the landing file. Run `uv run python scripts/run_pipeline.py --input /path/to/new-arrival.jsonl.zst` for each new immutable arrival. Its silver parts join the registered source, then dbt rebuilds the account marts from cumulative silver and the serving snapshot is atomically replaced. When a source is rebuilt with a newer schema, DuckDB registers only the latest complete version. An end-to-end two-file fixture checks account updates, duplicate-domain normalization, idempotence, and invalidation of stale AI notes. A replacement snapshot or deletion requires a separate source contract.
 
 ## Checks and AI workflow
 

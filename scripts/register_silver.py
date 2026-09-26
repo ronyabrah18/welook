@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, type=Path,
                         help="A completed run; all completed sibling runs are registered")
-    parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "sales.duckdb")
+    parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "full.duckdb")
     args = parser.parse_args()
     selected = json.loads((args.run / "manifest.json").read_text())
     if selected["status"] != "complete":
@@ -38,19 +38,25 @@ def main():
     sql_patterns = "[" + ", ".join(f"'{pattern}'" for pattern in patterns) + "]"
     args.db.parent.mkdir(parents=True, exist_ok=True)
     with duckdb.connect(str(args.db)) as con:
-        con.execute("CREATE SCHEMA IF NOT EXISTS raw")
-        prior = con.execute("SELECT table_type FROM information_schema.tables WHERE table_schema = 'raw' AND table_name = 'observations'").fetchone()
-        if prior:
-            con.execute("DROP VIEW raw.observations" if prior[0] == "VIEW" else "DROP TABLE raw.observations")
-        con.execute(f"CREATE OR REPLACE VIEW raw.observations AS SELECT * FROM read_parquet({sql_patterns})")
-        con.execute("CREATE OR REPLACE TABLE raw.ingestion_manifest (run_id VARCHAR, source_sha256 VARCHAR, source_lines BIGINT, accepted_rows BIGINT)")
-        con.executemany("INSERT INTO raw.ingestion_manifest VALUES (?, ?, ?, ?)", [
-            (manifest["run_id"], manifest["source_sha256"],
-             manifest["counts"]["source_lines"], manifest["counts"]["silver_rows"])
-            for _, manifest in runs])
-        count = con.execute("SELECT count(*) FROM raw.observations").fetchone()[0]
-        if count != sum(manifest["counts"]["silver_rows"] for _, manifest in runs):
-            raise ValueError("Registered silver count differs from manifest")
+        con.execute("BEGIN TRANSACTION")
+        try:
+            con.execute("CREATE SCHEMA IF NOT EXISTS raw")
+            prior = con.execute("SELECT table_type FROM information_schema.tables WHERE table_schema = 'raw' AND table_name = 'observations'").fetchone()
+            if prior:
+                con.execute("DROP VIEW raw.observations" if prior[0] == "VIEW" else "DROP TABLE raw.observations")
+            con.execute(f"CREATE OR REPLACE VIEW raw.observations AS SELECT * FROM read_parquet({sql_patterns})")
+            con.execute("CREATE OR REPLACE TABLE raw.ingestion_manifest (run_id VARCHAR, source_sha256 VARCHAR, source_lines BIGINT, accepted_rows BIGINT)")
+            con.executemany("INSERT INTO raw.ingestion_manifest VALUES (?, ?, ?, ?)", [
+                (manifest["run_id"], manifest["source_sha256"],
+                 manifest["counts"]["source_lines"], manifest["counts"]["silver_rows"])
+                for _, manifest in runs])
+            count = con.execute("SELECT count(*) FROM raw.observations").fetchone()[0]
+            if count != sum(manifest["counts"]["silver_rows"] for _, manifest in runs):
+                raise ValueError("Registered silver count differs from manifest")
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
     print(json.dumps({"db": str(args.db), "source_files": len(runs), "silver_rows": count}))
 
 

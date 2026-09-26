@@ -1,0 +1,4 @@
+{
+  "source_sha256": "8adb6ff8851a1d0ee5f3862c8a1c1915f9aacf5296c3b93d9bbcd93e2f9d9c0b",
+  "note": "The initial v2 API batch used source-line citations. This immutable source checksum allows deterministic conversion to globally unique source-record IDs."
+}

@@ -3,15 +3,20 @@
 import argparse
 import json
 from pathlib import Path
+import sys
 
 import duckdb
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from welook.lineage import source_registry_hash  # noqa: E402
 
 
-def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path) -> None:
+def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path,
+                                   current_registry_hash: str | None = None) -> int:
     """Fail the export if a published AI claim lacks visible source evidence."""
+    stale = 0
     for line_number, line in enumerate(path.read_text().splitlines(), 1):
         if not line.strip():
             continue
@@ -21,6 +26,12 @@ def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path
             raise ValueError(f"Unknown publication status on line {line_number}")
         if record.get("status") not in {"completed", "cache_hit"}:
             raise ValueError(f"Unsuccessful AI result on line {line_number}")
+        if current_registry_hash is not None:
+            if not record.get("source_registry_hash"):
+                raise ValueError(f"Published AI result lacks source lineage on line {line_number}")
+            if record["source_registry_hash"] != current_registry_hash:
+                stale += 1
+                continue
         domain = record["candidate_domain"]
         result = record["result"]
         decision = result["decision"]
@@ -34,8 +45,8 @@ def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path
             raise ValueError(f"Provider-only account cannot receive supported AI claim: {domain}")
         if review_status == "guardrail_checked" and decision == "supported":
             raise ValueError(f"Batch-supported claim needs individual review: {domain}")
-        evidence = {f"source-line-{row[0]}": (row[1], row[2]) for row in source.execute(
-            "SELECT source_line, http_domain_match, cert_domain_match FROM serving.evidence WHERE candidate_domain = ?", [domain]
+        evidence = {f"source-record-{row[0]}": (row[1], row[2]) for row in source.execute(
+            "SELECT source_record_id, http_domain_match, cert_domain_match FROM serving.evidence WHERE candidate_domain = ?", [domain]
         ).fetchall()}
         if not evidence_ids or not set(evidence_ids).issubset(evidence):
             raise ValueError(f"Reviewed assessment cites evidence absent from serving snapshot: {domain}")
@@ -43,6 +54,7 @@ def validate_published_assessments(source: duckdb.DuckDBPyConnection, path: Path
             evidence[evidence_id] == (True, True) for evidence_id in evidence_ids
         ):
             raise ValueError(f"Supported claim lacks a cited double domain match: {domain}")
+    return stale
 
 
 # Keep the old import name for callers using the earlier reviewed-only gate.
@@ -51,7 +63,7 @@ validate_reviewed_assessments = validate_published_assessments
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "sales.duckdb")
+    parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "full.duckdb")
     parser.add_argument("--output", type=Path, default=ROOT / "app" / "data" / "welook_serving.duckdb")
     parser.add_argument("--limit", type=int, default=50_000)
     parser.add_argument("--assessments", type=Path, default=ROOT / "app" / "data" / "published_assessments.jsonl")
@@ -63,6 +75,9 @@ def main():
     if pending.exists():
         pending.unlink()
     with duckdb.connect(str(args.db)) as source:
+        current_registry_hash = source_registry_hash(row[0] for row in source.execute(
+            "SELECT source_sha256 FROM raw.ingestion_manifest"
+        ).fetchall())
         escaped_pending = str(pending.resolve()).replace("'", "''")
         source.execute(f"ATTACH '{escaped_pending}' AS serving")
         total = source.execute("SELECT count(*) FROM analytics.fct_accounts").fetchone()[0]
@@ -99,35 +114,38 @@ def main():
             ) selected
             WHERE rank_in_account <= 3
         """)
+        stale_ai = 0
         if args.assessments.exists() and args.assessments.stat().st_size:
-            validate_published_assessments(source, args.assessments)
+            stale_ai = validate_published_assessments(source, args.assessments, current_registry_hash)
             assessment_path = str(args.assessments.resolve()).replace("'", "''")
             source.execute(f"""
                 CREATE TABLE serving.assessments AS
                 SELECT candidate_domain, result.decision AS decision,
                        result.reason AS reason, result.next_action AS next_action,
                        result.evidence_ids AS evidence_ids, prompt_version, model,
-                       assessed_at_utc, review_status
+                       assessed_at_utc, review_status, source_registry_hash
                 FROM read_json_auto('{assessment_path}', format='newline_delimited') ai
                 JOIN serving.accounts a USING (candidate_domain)
                 WHERE status IN ('completed', 'cache_hit')
                   AND review_status IN ('reviewed_for_demo', 'guardrail_checked')
                   AND result.decision IS NOT NULL
+                  AND source_registry_hash = ?
                   AND NOT (result.decision = 'supported' AND a.attribution_status = 'provider_only')
                 QUALIFY row_number() OVER (PARTITION BY candidate_domain
                     ORDER BY assessed_at_utc DESC) = 1
-            """)
+            """, [current_registry_hash])
         else:
             source.execute("""CREATE TABLE serving.assessments (
                 candidate_domain VARCHAR, decision VARCHAR, reason VARCHAR,
                 next_action VARCHAR, evidence_ids VARCHAR[], prompt_version VARCHAR,
-                model VARCHAR, assessed_at_utc VARCHAR, review_status VARCHAR)""")
+                model VARCHAR, assessed_at_utc VARCHAR, review_status VARCHAR,
+                source_registry_hash VARCHAR)""")
         selected = source.execute("SELECT count(*) FROM serving.accounts").fetchone()[0]
         evidence = source.execute("SELECT count(*) FROM serving.evidence").fetchone()[0]
         ai_count = source.execute("SELECT count(*) FROM serving.assessments").fetchone()[0]
         source_lines, accepted = source.execute("SELECT sum(source_lines), sum(accepted_rows) FROM raw.ingestion_manifest").fetchone()
-        source.execute("CREATE TABLE serving.build_info AS SELECT ?::BIGINT AS source_lines, ?::BIGINT AS accepted_observations, ?::BIGINT AS candidate_accounts, ?::BIGINT AS hosted_accounts, ?::BIGINT AS hosted_evidence_rows, ?::BIGINT AS ai_assessed_accounts, current_timestamp AS built_at",
-                       [source_lines, accepted, total, selected, evidence, ai_count])
+        source.execute("CREATE TABLE serving.build_info AS SELECT ?::BIGINT AS source_lines, ?::BIGINT AS accepted_observations, ?::BIGINT AS candidate_accounts, ?::BIGINT AS hosted_accounts, ?::BIGINT AS hosted_evidence_rows, ?::BIGINT AS ai_assessed_accounts, ?::BIGINT AS stale_ai_notes_skipped, ?::VARCHAR AS source_registry_hash, current_timestamp AS built_at",
+                       [source_lines, accepted, total, selected, evidence, ai_count, stale_ai, current_registry_hash])
         source.execute("CREATE INDEX accounts_domain_idx ON serving.accounts(candidate_domain)")
         source.execute("CREATE INDEX evidence_domain_idx ON serving.evidence(candidate_domain)")
         source.execute("DETACH serving")
@@ -139,6 +157,7 @@ def main():
     report = {"output": report_output, "size_bytes": args.output.stat().st_size,
               "candidate_accounts": total, "hosted_accounts": selected,
               "hosted_evidence_rows": evidence, "ai_assessed_accounts": ai_count,
+              "stale_ai_notes_skipped": stale_ai,
               "source_lines": source_lines,
               "accepted_observations": accepted,
               "hosting_limit_applied": selected < total}

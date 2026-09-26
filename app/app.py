@@ -59,7 +59,7 @@ def account_detail(domain: str):
     account = query("SELECT * FROM accounts WHERE candidate_domain = ?", [domain])
     assessment = query("SELECT * FROM assessments WHERE candidate_domain = ?", [domain])
     evidence = query(
-        "SELECT source_line, observed_at, ip_address, port, infrastructure_org, "
+        "SELECT 'source-record-' || source_record_id AS evidence_id, source_line, observed_at, ip_address, port, infrastructure_org, "
         "infrastructure_country, product, http_host, http_title, certificate_cn, "
         "vulnerability_count, http_domain_match, cert_domain_match, "
         "attribution_status, evidence_score FROM evidence "
@@ -113,6 +113,9 @@ st.caption(
 if int(info.hosted_accounts) < int(info.candidate_accounts):
     st.info("This hosted view shows a ranked subset. The local pipeline processed the full source; "
             "the account count above shows the complete candidate universe.")
+if int(info.stale_ai_notes_skipped):
+    st.info(f"{int(info.stale_ai_notes_skipped)} offline AI notes were withheld after a new source file arrived. "
+            "The account queue remains rule-based until those notes are reassessed.")
 
 prospects, research, ai_examples, saved, method = st.tabs(
     ["Prospect queue", "Research queue", "AI research examples", "Shortlist & export", "How to read this"]

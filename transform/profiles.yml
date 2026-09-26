@@ -3,6 +3,6 @@ firmable_intelligence:
   outputs:
     dev:
       type: duckdb
-      path: "{{ env_var('FIRMABLE_DB_PATH', '../artifacts/warehouse/sales.duckdb') }}"
+      path: "{{ env_var('FIRMABLE_DB_PATH', '../artifacts/warehouse/full.duckdb') }}"
       schema: analytics
       threads: 2

@@ -15,9 +15,9 @@ class ServingAiTest(unittest.TestCase):
         self.con = duckdb.connect()
         self.con.execute("ATTACH ':memory:' AS serving")
         self.con.execute("CREATE TABLE serving.accounts (candidate_domain VARCHAR, attribution_status VARCHAR)")
-        self.con.execute("CREATE TABLE serving.evidence (candidate_domain VARCHAR, source_line BIGINT, http_domain_match BOOLEAN, cert_domain_match BOOLEAN)")
+        self.con.execute("CREATE TABLE serving.evidence (candidate_domain VARCHAR, source_record_id VARCHAR, http_domain_match BOOLEAN, cert_domain_match BOOLEAN)")
         self.con.execute("INSERT INTO serving.accounts VALUES ('platform.example', 'provider_only'), ('firm.example', 'partial'), ('direct.example', 'supported')")
-        self.con.execute("INSERT INTO serving.evidence VALUES ('platform.example', 1, true, true), ('firm.example', 2, false, true), ('direct.example', 3, true, true)")
+        self.con.execute("INSERT INTO serving.evidence VALUES ('platform.example', 'one', true, true), ('firm.example', 'two', false, true), ('direct.example', 'three', true, true)")
 
     def tearDown(self):
         self.con.close()
@@ -31,26 +31,26 @@ class ServingAiTest(unittest.TestCase):
             validate_published_assessments(self.con, path)
 
     def test_matching_review_evidence_is_publishable(self):
-        self.check_record("firm.example", "needs_review", ["source-line-2"])
+        self.check_record("firm.example", "needs_review", ["source-record-two"])
 
     def test_provider_supported_claim_is_blocked(self):
         with self.assertRaisesRegex(ValueError, "Provider-only"):
-            self.check_record("platform.example", "supported", ["source-line-1"])
+            self.check_record("platform.example", "supported", ["source-record-one"])
 
     def test_missing_cited_evidence_is_blocked(self):
         with self.assertRaisesRegex(ValueError, "absent"):
-            self.check_record("firm.example", "supported", ["source-line-999"])
+            self.check_record("firm.example", "supported", ["source-record-999"])
 
     def test_partial_supported_claim_is_blocked(self):
         with self.assertRaisesRegex(ValueError, "double domain match"):
-            self.check_record("firm.example", "supported", ["source-line-2"])
+            self.check_record("firm.example", "supported", ["source-record-two"])
 
     def test_batch_supported_claim_is_blocked_even_with_double_match(self):
         with self.assertRaisesRegex(ValueError, "individual review"):
-            self.check_record("direct.example", "supported", ["source-line-3"], "guardrail_checked")
+            self.check_record("direct.example", "supported", ["source-record-three"], "guardrail_checked")
 
     def test_cautious_batch_note_is_publishable(self):
-        self.check_record("firm.example", "needs_review", ["source-line-2"], "guardrail_checked")
+        self.check_record("firm.example", "needs_review", ["source-record-two"], "guardrail_checked")
 
 
 if __name__ == "__main__":

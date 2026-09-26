@@ -95,6 +95,7 @@ class BudgetedAssessor:
         if len(allowed_ids) != len(evidence):
             raise ValueError("Evidence IDs must be unique")
         request_json = json.dumps({"candidate_domain": bundle["candidate_domain"],
+                                   "source_registry_hash": bundle.get("source_registry_hash"),
                                    "evidence": evidence}, sort_keys=True, ensure_ascii=False)
         cache_key = hashlib.sha256(json.dumps([self.model, prompt_version,
             hashlib.sha256(prompt.encode()).hexdigest(), SCHEMA_VERSION, request_json],

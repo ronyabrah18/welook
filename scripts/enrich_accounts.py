@@ -18,10 +18,14 @@ from openai import APIConnectionError, AuthenticationError, RateLimitError
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from welook.llm_client import BudgetedAssessor  # noqa: E402
+from welook.lineage import source_registry_hash  # noqa: E402
 
 
 def selected_bundles(db: Path, limit: int) -> list[dict]:
     with duckdb.connect(str(db), read_only=True) as con:
+        registry_hash = source_registry_hash(row[0] for row in con.execute(
+            "SELECT source_sha256 FROM raw.ingestion_manifest"
+        ).fetchall())
         rows = con.execute("""
             WITH selected AS (
                 SELECT candidate_domain FROM analytics.fct_accounts
@@ -35,7 +39,7 @@ def selected_bundles(db: Path, limit: int) -> list[dict]:
                 FROM analytics.int_account_evidence e
                 JOIN selected s USING (candidate_domain)
             )
-            SELECT candidate_domain, source_line, infrastructure_org, http_host,
+            SELECT candidate_domain, source_record_id, source_line, infrastructure_org, http_host,
                    http_title, certificate_cn, product, vulnerability_count,
                    verified_vulnerability_count, http_domain_match,
                    cert_domain_match, listed_provider_domain
@@ -43,15 +47,16 @@ def selected_bundles(db: Path, limit: int) -> list[dict]:
         """, [limit]).fetchall()
     bundles = defaultdict(list)
     for row in rows:
-        domain, line, org, host, title, cert, product, vulns, verified, hm, cm, provider = row
-        bundles[domain].append({"evidence_id": f"source-line-{line}",
+        domain, record_id, line, org, host, title, cert, product, vulns, verified, hm, cm, provider = row
+        bundles[domain].append({"evidence_id": f"source-record-{record_id}",
             "source_line": line, "infrastructure_org": org,
             "http_host": host, "http_title": title[:180] if title else None,
             "certificate_cn": cert, "product": product,
             "vulnerability_count": vulns, "verified_vulnerability_count": verified,
             "rule_flags": {"http_domain_match": hm, "cert_domain_match": cm,
                            "listed_provider_domain": provider}})
-    return [{"candidate_domain": domain, "evidence": evidence}
+    return [{"candidate_domain": domain, "source_registry_hash": registry_hash,
+             "evidence": evidence}
             for domain, evidence in sorted(bundles.items())]
 
 
@@ -83,12 +88,14 @@ def main():
             try:
                 assessed = assessor.assess(bundle, args.prompt)
                 record = {"candidate_domain": bundle["candidate_domain"],
+                          "source_registry_hash": bundle["source_registry_hash"],
                           "assessed_at_utc": datetime.now(timezone.utc).isoformat(),
                           "prompt_version": args.prompt, "model": assessor.model,
                           "status": assessed["status"], "cache_key": assessed["cache_key"],
                           "result": assessed["result"]}
             except Exception as exc:
                 record = {"candidate_domain": bundle["candidate_domain"],
+                          "source_registry_hash": bundle["source_registry_hash"],
                           "assessed_at_utc": datetime.now(timezone.utc).isoformat(),
                           "prompt_version": args.prompt, "model": assessor.model,
                           "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
