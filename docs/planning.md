@@ -35,13 +35,11 @@ Local supporting artifacts: `artifacts/full_scan/profile.json`, `artifacts/full_
 
 1. **Choose accounts to investigate.** Filter the hosted queue by candidate domain, investigation tier, attribution status, and technical signal. Dates remain visible in account detail. The source covers only a short snapshot window, so a recency filter would create false precision. Company territory, sector, and size are unknown; infrastructure country is shown only as observation evidence, never as a company-location filter.
 2. **Understand why an account appears.** Account detail shows observation references, timestamps, infrastructure provider versus candidate domain, technical signals, and contradictory fields. Do not transfer all observations on a shared IP to every domain associated with it.
-3. **Take the next useful action.** Save candidate domains in a session shortlist and export a research brief, or use the research queue when association is unclear. Account detail gives a provisional IT/security buyer role and an outreach-preparation step, but does not invent a named decision-maker or contact route. Confirm the legal business and service operator before outreach. Drafting and sending email are outside this prototype.
+3. **Take the next useful action.** Save candidate domains in a session shortlist and export a cited research brief, or use the "Needs research" filter when association is unclear. Account detail gives a provisional IT/security buyer role and a verification step, but does not invent a named decision-maker or contact route. Confirm the legal business and service operator before outreach. Drafting and sending email are outside this prototype.
 
-## Proposed screens
+## Implemented screen
 
-- Account queue: candidate domain/name, technical relevance, attribution status, strongest signal, observed date, and next action.
-- Account detail: evidence, possible business relevance, what remains unknown, and a suggested research action.
-- Research queue: unresolved account ownership, unsupported signals, missing contact route, and reason for review.
+The single discovery page shows a candidate table with the strongest research signal and evidence match. The selected row opens an account brief with a reason to investigate, next verification step, likely buyer role, up to three cited observations, and an AI note when one exists. "Investigate first", "Needs research", and "AI notes" are view filters. The session shortlist and cited CSV export are available in the sidebar.
 
 ## Rule and LLM split
 
@@ -51,7 +49,7 @@ The strongest tier requires both a direct domain match and a scanner-verified vu
 
 Proposed core LLM feature: interpret a compact evidence bundle and return a structured account research brief: evidence assessment (`supported`, `needs_review`, or `insufficient_evidence`), referenced observation IDs, a short explanation, and the next research action. Supported means supported by supplied evidence, not independently verified ownership or security status. Rules constrain progression to outreach review; the LLM does not override unresolved ownership.
 
-The offline LLM feature remains advisory because no labelled quality evaluation is submitted. The app shows 33 guardrail-checked batch notes on the top-100 research queue and two individually reviewed examples; none changes the queue or permits outreach. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
+The offline LLM feature remains advisory because no labelled quality evaluation is submitted. The app's "AI notes" filter shows 33 guardrail-checked batch notes and two individually reviewed examples; each appears in its account brief. None changes priority or permits outreach. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
 
 ## AI workflow scope and gap
 

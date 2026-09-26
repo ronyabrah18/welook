@@ -15,40 +15,49 @@ DEFAULT_DB = Path(__file__).resolve().parent / "data" / "welook_serving.duckdb"
 DB = Path(os.environ.get("WELOOK_SERVING_DB", DEFAULT_DB))
 st.set_page_config(page_title="WeLook · Account intelligence", page_icon="◉", layout="wide")
 
+SIGNAL_CASE = """CASE
+    WHEN a.directly_supported_verified_observation_count > 0 THEN 'Direct verified label'
+    WHEN a.verified_vulnerability_association_count > 0 THEN 'Verified label; check operator'
+    WHEN a.vulnerability_association_count > 0 THEN 'Vulnerability metadata'
+    WHEN a.admin_or_login_observation_count > 0 THEN 'Admin/login page'
+    ELSE 'Observed service' END"""
+
 
 def query(sql: str, params: list | None = None):
     with duckdb.connect(str(DB), read_only=True) as con:
         return con.execute(sql, params or []).fetchdf()
 
 
-def account_rows(search: str, tiers: list[str], attribution: list[str], limit: int = 100,
-                 signal: str = "Any signal", direct_only: bool = False):
+def account_rows(search: str, view: str, signal: str, direct_only: bool,
+                 attribution: str, limit: int = 100):
     conditions = ["1=1"]
     params: list = []
     if search:
         conditions.append("a.candidate_domain ILIKE ?")
         params.append("%" + search.strip() + "%")
-    if tiers:
-        conditions.append("priority_tier IN (SELECT unnest(?))")
-        params.append(tiers)
-    if attribution:
-        conditions.append("attribution_status IN (SELECT unnest(?))")
+    if view == "Investigate first":
+        conditions.append("a.priority_tier = 'investigate_first'")
+    elif view == "Needs research":
+        conditions.append("a.priority_tier = 'research'")
+    elif view == "AI notes":
+        conditions.append("assessment.candidate_domain IS NOT NULL")
+    if attribution != "Any match":
+        conditions.append("a.attribution_status = ?")
         params.append(attribution)
     if direct_only:
         conditions.append("a.attribution_status = 'supported'")
     signal_columns = {
-        "Scanner-verified association": "a.verified_vulnerability_association_count",
-        "Admin or login page": "a.admin_or_login_observation_count",
-        "Any vulnerability association": "a.vulnerability_association_count",
+        "Direct verified label": "a.directly_supported_verified_observation_count",
+        "Any scanner-verified label": "a.verified_vulnerability_association_count",
+        "Admin/login page": "a.admin_or_login_observation_count",
+        "Vulnerability metadata": "a.vulnerability_association_count",
     }
     if signal != "Any signal":
         conditions.append(f"{signal_columns[signal]} > 0")
     params.append(limit)
     return query(
-        "SELECT a.candidate_domain, a.priority_tier, a.attribution_status, a.investigation_score, "
-        "a.observation_count, a.vulnerability_association_count, "
-        "a.directly_supported_verified_observation_count AS verified_direct_matches, a.last_observed_at, "
-        "coalesce(assessment.decision, 'rule_only') AS ai_decision "
+        "SELECT a.candidate_domain, a.priority_tier, a.attribution_status, "
+        f"{SIGNAL_CASE} AS research_signal, a.investigation_score, a.last_observed_at "
         "FROM accounts a LEFT JOIN assessments assessment USING (candidate_domain) WHERE " + " AND ".join(conditions) +
         " ORDER BY CASE a.priority_tier WHEN 'investigate_first' THEN 0 "
         "WHEN 'research' THEN 1 ELSE 2 END, a.investigation_score DESC, a.candidate_domain LIMIT ?",
@@ -62,7 +71,7 @@ def account_detail(domain: str):
     evidence = query(
         "SELECT 'source-record-' || source_record_id AS evidence_id, source_line, observed_at, ip_address, port, infrastructure_org, "
         "infrastructure_country, product, http_host, http_title, certificate_cn, "
-        "vulnerability_count, http_domain_match, cert_domain_match, "
+        "vulnerability_count, verified_vulnerability_count, http_domain_match, cert_domain_match, "
         "attribution_status, evidence_score FROM evidence "
         "WHERE candidate_domain = ? ORDER BY evidence_score DESC, observed_at DESC",
         [domain],
@@ -75,11 +84,16 @@ def shortlist_csv(domains: list[str]) -> str:
         return ""
     placeholders = ",".join("?" for _ in domains)
     rows = query(
-        "SELECT candidate_domain, priority_tier, attribution_status, investigation_score, "
-        "observation_count, vulnerability_association_count, verified_vulnerability_association_count, "
-        "directly_supported_verified_observation_count, "
-        "last_observed_at, next_action "
-        f"FROM accounts WHERE candidate_domain IN ({placeholders}) ORDER BY investigation_score DESC",
+        "SELECT a.candidate_domain, a.priority_tier, a.attribution_status, "
+        f"{SIGNAL_CASE} AS research_signal, a.last_observed_at, "
+        "(SELECT 'source-record-' || e.source_record_id FROM evidence e "
+        " WHERE e.candidate_domain = a.candidate_domain "
+        " ORDER BY e.evidence_score DESC, e.observed_at DESC, e.source_record_id LIMIT 1) "
+        "AS example_evidence_id, a.next_action, "
+        "'Unverified candidate domain' AS identity_status "
+        f"FROM accounts a WHERE a.candidate_domain IN ({placeholders}) "
+        "ORDER BY CASE a.priority_tier WHEN 'investigate_first' THEN 0 "
+        "WHEN 'research' THEN 1 ELSE 2 END, a.investigation_score DESC",
         domains,
     )
     out = StringIO()
@@ -87,6 +101,22 @@ def shortlist_csv(domains: list[str]) -> str:
     writer.writerow(list(rows.columns))
     writer.writerows(rows.itertuples(index=False, name=None))
     return out.getvalue()
+
+
+def research_reason(row) -> str:
+    if row.directly_supported_verified_observation_count:
+        count = int(row.directly_supported_verified_observation_count)
+        return (f"{count} service observation{'s have' if count != 1 else ' has'} a "
+                "scanner-verified vulnerability label and both HTTP-host and certificate-domain matches.")
+    if row.verified_vulnerability_association_count:
+        return ("A scanner-verified vulnerability label appears in associated observations, "
+                "but none of those labelled observations has both direct domain matches.")
+    if row.vulnerability_association_count:
+        return ("Associated observations contain vulnerability metadata. The directly matched "
+                "evidence has no scanner-verified label.")
+    if row.admin_or_login_observation_count:
+        return "An admin/login page title was observed. A login page alone is not evidence of a weakness."
+    return "Internet-facing service observations reference this domain; their operator and relevance need research."
 
 
 if not DB.exists():
@@ -97,149 +127,112 @@ if "shortlist" not in st.session_state:
     st.session_state.shortlist = []
 
 info = query("SELECT * FROM build_info").iloc[0]
+first_count = int(query("SELECT count(*) AS n FROM accounts WHERE priority_tier = 'investigate_first'").iloc[0].n)
 st.caption("WELOOK  /  CYBERSECURITY ACCOUNT RESEARCH")
 st.title("Know who to investigate next.")
-st.write("Explore external-service evidence, check attribution, and prepare a focused research list.")
+st.write("Filter candidate domains, inspect the evidence, and save a short research list.")
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Source observations", f"{int(info.source_lines):,}")
-c2.metric("Candidate domains", f"{int(info.candidate_accounts):,}")
-c3.metric("Available in app", f"{int(info.hosted_accounts):,}")
-c4.metric("Shortlisted this session", len(st.session_state.shortlist))
+c1, c2, c3 = st.columns(3)
+c1.metric("Candidate domains analysed", f"{int(info.candidate_accounts):,}")
+c2.metric("Investigate first", f"{first_count:,}")
+c3.metric("Available to explore", f"{int(info.hosted_accounts):,}")
 st.caption(
-    f"Snapshot built {str(info.built_at)[:19]} · "
-    f"{int(info.accepted_observations):,} validated observations · "
-    f"{int(info.ai_assessed_accounts):,} offline AI assessments · "
-    "Technical evidence is a research signal, not a confirmed vulnerability or buying intent."
+    f"Historical source: {int(info.accepted_observations):,} service observations · "
+    f"{int(info.ai_assessed_accounts):,} offline AI research notes · Snapshot built {str(info.built_at)[:19]}"
 )
-st.warning("Candidate domains are not verified organisations. Confirm the business and service operator "
-           "before using any account for outreach.")
+st.info("These are candidate domains, not verified organisations or confirmed vulnerabilities. "
+        "Confirm the business and service operator before outreach.")
 if int(info.hosted_accounts) < int(info.candidate_accounts):
-    st.info("This hosted view shows a ranked subset. The local pipeline processed the full source; "
-            "the account count above shows the complete candidate universe.")
+    st.caption("The app contains a ranked subset; the pipeline processed the full source.")
 if int(info.stale_ai_notes_skipped):
     st.info(f"{int(info.stale_ai_notes_skipped)} offline AI notes were withheld after a new source file arrived. "
             "The account queue remains rule-based until those notes are reassessed.")
 
-prospects, research, ai_examples, saved, method = st.tabs(
-    ["Candidate queue", "Research queue", "AI research examples", "Shortlist & export", "How to read this"]
-)
-
-with prospects:
+st.subheader("Explore candidates")
+search_col, view_col, signal_col = st.columns([2, 1.2, 1.5])
+search = search_col.text_input("Find a domain", placeholder="company.example")
+view = view_col.selectbox("View", ["All candidates", "Investigate first", "Needs research", "AI notes"])
+signal = signal_col.selectbox("Technical signal", ["Any signal", "Direct verified label",
+                                                    "Any scanner-verified label", "Admin/login page",
+                                                    "Vulnerability metadata"])
+with st.expander("More filters"):
     direct_only = st.toggle(
         "Direct domain matches only",
-        help="Keep accounts with both an HTTP-host and certificate-domain match. This excludes known "
-             "provider-only and partial matches, but does not verify a legal business or service operator.",
+        help="Both HTTP host and certificate match a candidate domain in at least one observation. "
+             "This does not verify a legal business or service operator.",
     )
-    left, middle, right = st.columns([2, 2, 2])
-    search = left.text_input("Find a domain", placeholder="company.example")
-    tiers = middle.multiselect("Priority", ["investigate_first", "research", "low_evidence"],
-                                default=["investigate_first", "research", "low_evidence"])
-    attribution = right.multiselect("Attribution", ["supported", "partial", "unresolved", "provider_only"])
-    signal = st.selectbox("Technical signal", ["Any signal", "Scanner-verified association",
-                                               "Admin or login page", "Any vulnerability association"])
-    matches = account_rows(search, tiers, attribution, signal=signal, direct_only=direct_only)
-    st.caption(f"Showing {len(matches):,} highest-ranked candidate domains. Search by domain to narrow further. "
-               "'Investigate first' requires a direct domain match and scanner-verified association on the same observation; "
-               "an admin/login title alone stays in research.")
-    st.dataframe(matches, hide_index=True, width="stretch")
-    if len(matches):
-        domain = st.selectbox("Inspect account evidence", matches["candidate_domain"].tolist())
-        row, evidence, assessment = account_detail(domain)
+    attribution = st.selectbox("Evidence match", ["Any match", "supported", "partial",
+                                                    "unresolved", "provider_only"])
+
+matches = account_rows(search, view, signal, direct_only, attribution)
+st.caption(f"Showing {len(matches):,} highest-ranked matches. Select a row to inspect it; "
+           "search by domain to narrow the 50,000-account hosted set.")
+if len(matches):
+    display = matches.rename(columns={
+        "candidate_domain": "Domain", "priority_tier": "Priority",
+        "attribution_status": "Match", "research_signal": "Research signal",
+        "investigation_score": "Score", "last_observed_at": "Last observed",
+    }).copy()
+    display["Priority"] = display["Priority"].str.replace("_", " ").str.title()
+    display["Match"] = display["Match"].str.replace("_", " ").str.title()
+    choice = st.dataframe(display, hide_index=True, width="stretch", height=360,
+                          on_select="rerun", selection_mode="single-row",
+                          column_config={"Score": st.column_config.NumberColumn(
+                              "Score", help="Rule-derived investigation score, not purchase probability.")})
+    selected_rows = choice.selection.rows
+    selected_index = selected_rows[0] if selected_rows and selected_rows[0] < len(matches) else 0
+    domain = str(matches.iloc[selected_index].candidate_domain)
+    row, evidence, assessment = account_detail(domain)
+
+    with st.container(border=True):
         st.subheader(domain)
-        a, b, c = st.columns(3)
-        a.metric("Investigation score", int(row.investigation_score))
-        b.metric("Attribution", row.attribution_status)
-        c.metric("Observed services", f"{int(row.observation_count):,}")
-        st.write(f"**Suggested next step:** {row.next_action}")
-        st.write("**Who to reach:** An IT or security owner is the working buyer role; "
-                 "the dataset has no named contact or verified contact route.")
-        if row.attribution_status == "supported" and row.priority_tier == "investigate_first":
-            st.write("**Outreach preparation:** First confirm the business operates this service through "
-                     "its official site or an approved account record. Then find the relevant IT/security "
-                     "contact and ask about external-asset visibility. Do not assert a breach or vulnerability.")
-        else:
-            st.write("**Outreach preparation:** Resolve the service operator and business identity "
-                     "before looking for a contact. Keep this in the research queue until attribution is clear.")
-        if len(assessment):
-            ai = assessment.iloc[0]
-            st.info(f"AI research suggestion ({ai.prompt_version}, {ai.model}; {ai.review_status}): "
-                    f"{ai.decision}. {ai.reason} Next: {ai.next_action}")
-            st.caption("This suggestion does not change the rule-derived priority or clear the account for outreach. "
-                       "Verify the service operator and any technical claim independently.")
-        if row.example_http_title:
-            st.write(f"**Example page title:** {row.example_http_title}")
-        if row.example_product:
-            st.write(f"**Observed product:** {row.example_product}")
-        st.caption("Displayed evidence is selected from the dataset; it may not represent every associated service. "
-                   "An IP or infrastructure organisation is not proof of account ownership.")
-        st.dataframe(evidence, hide_index=True, width="stretch")
-        if int(row.vulnerability_association_count):
-            st.warning(f"Dataset vulnerability associations appear on {int(row.vulnerability_association_count):,} observations; "
-                       f"{int(row.verified_vulnerability_association_count):,} have a scanner-verified flag. "
-                       "Affected status and account ownership still require verification before outreach.")
+        st.caption(f"{str(row.priority_tier).replace('_', ' ').title()} · "
+                   f"{str(row.attribution_status).replace('_', ' ').title()} domain match · "
+                   f"Last observed {str(row.last_observed_at)[:10]}")
+        st.write(f"**Why it is in the queue:** {research_reason(row)}")
+        st.write(f"**Next research step:** {row.next_action}")
+        st.write("**Likely buyer role:** IT or security owner. The dataset has no named contact. "
+                 "Confirm who operates this service before choosing a person to contact.")
         if st.button("Add to shortlist", disabled=domain in st.session_state.shortlist):
             st.session_state.shortlist.append(domain)
             st.rerun()
+        if len(assessment):
+            ai = assessment.iloc[0]
+            st.info(f"**AI research note ({ai.decision}):** {ai.reason} Next: {ai.next_action}")
+            st.caption("Advisory only; the note does not change priority or verify ownership. "
+                       f"Prompt {ai.prompt_version} · {ai.model} · {ai.review_status}")
+            with st.expander("AI citations"):
+                st.write(", ".join(ai.evidence_ids))
 
-with research:
-    st.subheader("Accounts needing verification")
-    st.write("These have a technical cue but only a partial account match. Confirm who operates the service before contacting anyone.")
-    review = account_rows("", ["research", "low_evidence"], ["partial", "unresolved", "provider_only"], 100)
-    covered = int((review["ai_decision"] != "rule_only").sum())
-    st.caption(f"Offline AI note available for {covered} of these {len(review)} displayed research accounts. "
-               "The remaining rows use rules only; AI notes do not verify ownership or change rank.")
-    st.dataframe(review, hide_index=True, width="stretch")
+        st.markdown("**Selected source evidence**")
+        st.caption("Up to three observations are shown. Scanner labels and domain matches are evidence, "
+                   "not proof that the business is affected.")
+        st.dataframe(evidence, hide_index=True, width="stretch")
+else:
+    st.info("No candidate domains match these filters. Try a broader view or signal.")
 
-with ai_examples:
-    st.subheader("Offline account-research notes")
-    st.write("A small model reviews up to three service observations per selected domain and suggests "
-             "what to verify next. Batch notes passed a deterministic evidence gate; only notes marked "
-             "reviewed_for_demo received individual review. These are not a measured quality evaluation "
-             "or permission to contact an account.")
-    examples = query(
-        "SELECT candidate_domain, decision, reason, next_action, prompt_version, review_status "
-        "FROM assessments ORDER BY candidate_domain"
-    )
-    if len(examples):
-        st.dataframe(examples, hide_index=True, width="stretch")
-        example_domain = st.selectbox("Inspect AI example and source evidence", examples["candidate_domain"].tolist())
-        _, example_evidence, example_assessment = account_detail(example_domain)
-        example = example_assessment.iloc[0]
-        st.write(f"**Model decision:** {example.decision} · **Prompt:** {example.prompt_version} · "
-                 f"**Model:** {example.model} · **Publication check:** {example.review_status}")
-        st.write(f"**Why:** {example.reason}")
-        st.write(f"**Next research step:** {example.next_action}")
-        st.caption("Cited source IDs: " + ", ".join(example.evidence_ids))
-        st.dataframe(example_evidence, hide_index=True, width="stretch")
-    else:
-        st.info("No AI research notes have been published in this snapshot.")
-
-with saved:
-    st.subheader("Session shortlist")
-    st.caption("Saved only in this browser session. Download the CSV to keep your work.")
+with st.sidebar:
+    st.header(f"Shortlist · {len(st.session_state.shortlist)}")
+    st.caption("Saved for this browser session only. Export a research brief to keep it.")
     if st.session_state.shortlist:
-        st.write(", ".join(st.session_state.shortlist))
+        for shortlisted_domain in st.session_state.shortlist:
+            st.write(shortlisted_domain)
         st.download_button("Download research brief CSV", shortlist_csv(st.session_state.shortlist),
                            file_name="welook-research-brief.csv", mime="text/csv")
-        remove = st.selectbox("Remove an account", st.session_state.shortlist)
+        remove = st.selectbox("Remove a domain", st.session_state.shortlist)
         if st.button("Remove selected"):
             st.session_state.shortlist.remove(remove)
             st.rerun()
     else:
-        st.info("Open an account in the prospect queue and add it here.")
+        st.write("Select a candidate and add it here.")
 
-with method:
-    st.subheader("What the labels mean")
+with st.expander("How to read the evidence"):
     st.markdown("""
-    - **Supported attribution:** The candidate domain matches both HTTP host and certificate name in an observation. It still needs human verification.
-    - **Direct domain matches only:** A rule-based evidence filter, not an LLM-verified business list. Hosting companies may still pass if their own host and certificate match.
-    - **Partial attribution:** One of those fields matches; the other is absent or different.
-    - **Provider only:** The candidate domain is on a conservative infrastructure-provider list.
-    - **Investigation score:** A transparent technical-research score, not a sales conversion probability.
-    - **Investigate first:** A direct domain match and scanner-verified vulnerability association on the same observation. This still does not confirm the business is affected.
-    - **Research:** A weaker technical signal or account match, including admin/login pages without scanner verification.
-    - **Vulnerability association:** A label supplied with the observation, not proof that the named business is affected.
+    - **Investigate first:** Both domain fields match and a scanner-verified vulnerability label appears on the same observation. Verify the finding and operator before outreach.
+    - **Needs research:** A weaker signal or account match, including an admin/login title. A login page is not a vulnerability by itself.
+    - **Direct domain matches only:** A rule-based evidence filter, not a verified-business list. A hosting provider can still pass.
+    - **AI notes:** Offline suggestions on 35 selected accounts. Most accounts use rules only; notes are not a measured quality evaluation or permission to contact a business.
     """)
-    st.write("The source is one historical snapshot. We cannot infer a new exposure, live security posture, purchase intent, company territory, or a named decision-maker from it.")
-    st.caption("WeLook · Firmable take-home prototype · Rule-derived queue with advisory offline AI research notes.")
+    st.write("This is one historical scan snapshot. It cannot establish current exposure, "
+             "buying intent, company territory, legal identity, or a decision-maker.")
+st.caption("WeLook · Firmable take-home prototype · Evidence-backed research, not automated outreach.")
