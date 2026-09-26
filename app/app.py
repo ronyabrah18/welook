@@ -2,26 +2,18 @@
 
 from __future__ import annotations
 
-import csv
-from io import StringIO
 import os
 from pathlib import Path
 
 import duckdb
 import streamlit as st
 
+from welook.handoff import SIGNAL_CASE, shortlist_csv
+
 
 DEFAULT_DB = Path(__file__).resolve().parent / "data" / "welook_serving.duckdb"
 DB = Path(os.environ.get("WELOOK_SERVING_DB", DEFAULT_DB))
 st.set_page_config(page_title="WeLook · Account intelligence", page_icon="◉", layout="wide")
-
-SIGNAL_CASE = """CASE
-    WHEN a.directly_supported_verified_observation_count > 0 THEN 'Direct verified label'
-    WHEN a.verified_vulnerability_association_count > 0 THEN 'Verified label; check operator'
-    WHEN a.vulnerability_association_count > 0 THEN 'Vulnerability metadata'
-    WHEN a.admin_or_login_observation_count > 0 THEN 'Admin/login page'
-    ELSE 'Observed service' END"""
-
 
 def query(sql: str, params: list | None = None):
     with duckdb.connect(str(DB), read_only=True) as con:
@@ -29,7 +21,7 @@ def query(sql: str, params: list | None = None):
 
 
 def account_rows(search: str, view: str, signal: str, direct_only: bool,
-                 attribution: str, limit: int = 100):
+                 attribution: str, product: str = "", limit: int = 100):
     conditions = ["1=1"]
     params: list = []
     if search:
@@ -46,6 +38,10 @@ def account_rows(search: str, view: str, signal: str, direct_only: bool,
         params.append(attribution)
     if direct_only:
         conditions.append("a.attribution_status = 'supported'")
+    if product.strip():
+        conditions.append("EXISTS (SELECT 1 FROM evidence e WHERE e.candidate_domain = a.candidate_domain "
+                          "AND e.product ILIKE ?)")
+        params.append("%" + product.strip() + "%")
     signal_columns = {
         "Direct verified label": "a.directly_supported_verified_observation_count",
         "Any scanner-verified label": "a.verified_vulnerability_association_count",
@@ -79,28 +75,8 @@ def account_detail(domain: str):
     return account.iloc[0], evidence, assessment
 
 
-def shortlist_csv(domains: list[str]) -> str:
-    if not domains:
-        return ""
-    placeholders = ",".join("?" for _ in domains)
-    rows = query(
-        "SELECT a.candidate_domain, a.priority_tier, a.attribution_status, "
-        f"{SIGNAL_CASE} AS research_signal, a.last_observed_at, "
-        "(SELECT 'source-record-' || e.source_record_id FROM evidence e "
-        " WHERE e.candidate_domain = a.candidate_domain "
-        " ORDER BY e.evidence_score DESC, e.observed_at DESC, e.source_record_id LIMIT 1) "
-        "AS example_evidence_id, a.next_action, "
-        "'Unverified candidate domain' AS identity_status "
-        f"FROM accounts a WHERE a.candidate_domain IN ({placeholders}) "
-        "ORDER BY CASE a.priority_tier WHEN 'investigate_first' THEN 0 "
-        "WHEN 'research' THEN 1 ELSE 2 END, a.investigation_score DESC",
-        domains,
-    )
-    out = StringIO()
-    writer = csv.writer(out)
-    writer.writerow(list(rows.columns))
-    writer.writerows(rows.itertuples(index=False, name=None))
-    return out.getvalue()
+RESEARCH_STATUSES = ["Researching", "Verify operator", "Verify technical finding",
+                     "Hold", "Ready for sales review"]
 
 
 def research_reason(row) -> str:
@@ -125,6 +101,8 @@ if not DB.exists():
 
 if "shortlist" not in st.session_state:
     st.session_state.shortlist = []
+if "research" not in st.session_state:
+    st.session_state.research = {}
 
 info = query("SELECT * FROM build_info").iloc[0]
 first_count = int(query("SELECT count(*) AS n FROM accounts WHERE priority_tier = 'investigate_first'").iloc[0].n)
@@ -163,8 +141,11 @@ with st.expander("More filters"):
     )
     attribution = st.selectbox("Evidence match", ["Any match", "supported", "partial",
                                                     "unresolved", "provider_only"])
+    product = st.text_input("Product in selected evidence", placeholder="e.g. cPanel",
+                            help="Searches product names in the up-to-three evidence rows retained per hosted domain. "
+                                 "A missing match does not mean a company does not use the product.")
 
-matches = account_rows(search, view, signal, direct_only, attribution)
+matches = account_rows(search, view, signal, direct_only, attribution, product)
 st.caption(f"Showing {len(matches):,} highest-ranked matches. Select a row to inspect it; "
            "search by domain to narrow the 50,000-account hosted set.")
 if len(matches):
@@ -196,6 +177,19 @@ if len(matches):
         if st.button("Add to shortlist", disabled=domain in st.session_state.shortlist):
             st.session_state.shortlist.append(domain)
             st.rerun()
+        if domain in st.session_state.shortlist:
+            with st.expander("Research handoff", expanded=False):
+                saved = st.session_state.research.get(domain, {})
+                status = st.selectbox("Research status", RESEARCH_STATUSES,
+                                      index=RESEARCH_STATUSES.index(saved.get("status", "Researching")),
+                                      key=f"research_status_{domain}")
+                note = st.text_area("What you checked or need to check", value=saved.get("note", ""),
+                                    max_chars=600, key=f"research_note_{domain}")
+                st.caption("Your status and note stay in this browser session and appear in the CSV export. "
+                           "The source data does not verify identity or current exposure.")
+                if st.button("Save research update", key=f"save_research_{domain}"):
+                    st.session_state.research[domain] = {"status": status, "note": note.strip()}
+                    st.success("Research update saved for export.")
         if len(assessment):
             ai = assessment.iloc[0]
             st.info(f"**AI research note ({ai.decision}):** {ai.reason} Next: {ai.next_action}")
@@ -231,11 +225,14 @@ with st.sidebar:
     if st.session_state.shortlist:
         for shortlisted_domain in st.session_state.shortlist:
             st.write(shortlisted_domain)
-        st.download_button("Download research brief CSV", shortlist_csv(st.session_state.shortlist),
+            st.caption(st.session_state.research.get(shortlisted_domain, {}).get("status", "Researching"))
+        st.download_button("Download research brief CSV", shortlist_csv(DB, st.session_state.shortlist,
+                           st.session_state.research),
                            file_name="welook-research-brief.csv", mime="text/csv")
         remove = st.selectbox("Remove a domain", st.session_state.shortlist)
         if st.button("Remove selected"):
             st.session_state.shortlist.remove(remove)
+            st.session_state.research.pop(remove, None)
             st.rerun()
     else:
         st.write("Select a candidate and add it here.")
