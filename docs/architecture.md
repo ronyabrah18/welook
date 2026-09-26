@@ -87,7 +87,7 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 ## Build order and proof of completion
 
 1. **Done:** stream the full file into bronze, rebuild silver from bronze, reconcile 11,768,718 rows, and exercise incremental, replay, and quarantine fixtures.
-2. **Done:** build and test 425,121 candidate domains with dbt, then export a about 21 MB serving snapshot and run the Streamlit app locally.
+2. **Done:** build and test 425,121 candidate domains with dbt, then export an approximately 21 MB serving snapshot and run the Streamlit app locally.
 3. **Partly done:** the traced, budgeted offline AI adapter exists, but it has no submitted labelled evaluation or published app decisions.
 4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, invite reviewers and verify their access.
 

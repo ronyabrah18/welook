@@ -65,7 +65,7 @@ The take-home explicitly requests 20–30 hand-labelled examples, a one-command 
 
 The snapshot does not establish new exposure, growth, historical change, purchase intent, headquarters, company size, named decision-makers, or budget. Server country is not sales territory. Certificates, banners, and dataset labels can be stale or misleading. Missing vulnerability metadata does not mean secure. A certificate/domain match does not attribute every service on a shared IP.
 
-No active scanning, automated email sending, CRM integration, model training, or full-scale multi-tenant platform is needed for the prototype. Process the entire supplied dataset through landing, faithful bronze Parquet, validated silver, and derived gold. The 5,000-record sample is for development only. Retain unresolved observations with reasons. All eligible accounts receive rule-derived results; a budgeted subset receives AI assessment. Publish compact account tables and selected evidence, with any serving-detail limits and AI coverage stated explicitly.
+No active scanning, automated email sending, CRM integration, model training, or full-scale multi-tenant platform is needed for the prototype. Process the entire supplied dataset through landing, faithful bronze Parquet, validated silver, and derived gold. The 5,000-record sample is for development only. Retain unresolved observations with reasons. All eligible accounts receive rule-derived results; selected accounts could receive offline AI assessment after a quality review. Publish compact account tables and selected evidence, with any serving-detail limits and AI coverage stated explicitly.
 
 ## Delivery and next decisions
 
