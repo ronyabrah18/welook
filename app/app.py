@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import streamlit as st
 
-from welook.handoff import SIGNAL_CASE, shortlist_csv
+from handoff import SIGNAL_CASE, shortlist_csv
 
 
 DEFAULT_DB = Path(__file__).resolve().parent / "data" / "welook_serving.duckdb"

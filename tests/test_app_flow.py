@@ -10,7 +10,7 @@ import duckdb
 from streamlit.testing.v1 import AppTest
 
 from scripts.ingest_full import ROOT
-from welook.handoff import shortlist_csv
+from app.handoff import shortlist_csv
 
 
 class AppFlowTest(unittest.TestCase):
