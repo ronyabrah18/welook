@@ -18,7 +18,7 @@ with expanded as (
 ), assessed as (
     select *,
         regexp_matches(candidate_domain,
-            '(^|[.])(amazonaws[.]com|cloudfront[.]net|googleusercontent[.]com|incapdns[.]net|akamaitechnologies[.]com|contaboserver[.]net|awsglobalaccelerator[.]com|hwclouds-dns[.]com|linodeusercontent[.]com|ovh[.]net|scw[.]cloud|vultrusercontent[.]com|your-server[.]de|flyio[.]net|mybigcommerce[.]com|memberclicks[.]net|pair[.]com|shop-pro[.]jp|exblog[.]jp)$'
+            '(^|[.])(amazonaws[.]com|cloudfront[.]net|googleusercontent[.]com|incapdns[.]net|akamaitechnologies[.]com|contaboserver[.]net|awsglobalaccelerator[.]com|hwclouds-dns[.]com|linodeusercontent[.]com|ovh[.]net|scw[.]cloud|vultrusercontent[.]com|your-server[.]de|flyio[.]net|mybigcommerce[.]com|memberclicks[.]net|pair[.]com|shop-pro[.]jp|exblog[.]jp|1blu[.]de)$'
         ) as listed_provider_domain,
         (clean_http_host = candidate_domain or ends_with(clean_http_host, '.' || candidate_domain)) as http_domain_match,
         (clean_cert_cn = candidate_domain or ends_with(clean_cert_cn, '.' || candidate_domain)) as cert_domain_match

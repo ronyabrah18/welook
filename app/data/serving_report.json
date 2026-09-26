@@ -1,6 +1,6 @@
 {
   "output": "app/data/welook_serving.duckdb",
-  "size_bytes": 21508096,
+  "size_bytes": 21245952,
   "candidate_accounts": 425121,
   "hosted_accounts": 50000,
   "hosted_evidence_rows": 96113,
