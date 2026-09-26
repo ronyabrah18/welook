@@ -49,7 +49,7 @@ Rules handle parsing, domain normalisation, provider/platform screening, observa
 
 Proposed core LLM feature: interpret a compact evidence bundle and return a structured account research brief: evidence assessment (`supported`, `needs_review`, or `insufficient_evidence`), referenced observation IDs, a short explanation, and the next research action. Supported means supported by supplied evidence, not independently verified ownership or security status. Rules constrain progression to outreach review; the LLM does not override unresolved ownership.
 
-The offline LLM feature remains advisory because no labelled quality evaluation is submitted. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
+The offline LLM feature remains advisory because no labelled quality evaluation is submitted. Two traced, reviewed-for-display cases show its output in the app, but neither changes the queue or permits outreach. Outreach starters can use deterministic templates populated with reviewed facts; a separate generative drafting feature is outside this prototype.
 
 ## AI workflow scope and gap
 
@@ -59,7 +59,7 @@ The offline LLM feature remains advisory because no labelled quality evaluation 
 - Cache results by evidence hash, prompt version, and model. Call the LLM for shortlisted accounts, not all 11.8 million observations.
 - Cost model: calls = new/changed accounts per run × runs per month; cost = calls × (input tokens × input price + output tokens × output price) / 1,000,000. Include retry budgets and enforce a spend ceiling.
 
-The take-home explicitly requests 20–30 hand-labelled examples, a one-command eval harness, and measured quality. Those items are **not delivered** in this version. Without them, LLM output cannot be presented as quality-validated, so the hosted app does not use it to authorise outreach.
+The take-home explicitly requests 20–30 hand-labelled examples, a one-command eval harness, and measured quality. Those items are **not delivered** in this version. Without them, LLM output cannot be presented as quality-validated, so the hosted app presents two limited research examples but does not use them to authorise outreach.
 
 ## Scope and limitations
 
@@ -71,7 +71,7 @@ No active scanning, automated email sending, CRM integration, model training, or
 
 The submitted scope is a hosted app; source repo with a skill and prompts; this planning document; architecture and cost documentation; and a half-to-one-page development reflection. The requested labelled eval deliverable is missing. Optional walkthrough at most five minutes.
 
-Next: verify reviewer access to the already deployed app. Any future AI publication should first add reviewed examples and a measured quality gate. The take-home API ceiling is US$10 total; earlier offline experiments used US$0.013798 according to the local ledger, but their evaluation artifacts are not part of this submission.
+Next: verify reviewer access to the already deployed app. Any expansion of AI publication beyond the two examples should first add reviewed cases and a measured quality gate. The take-home API ceiling is US$10 total; earlier offline experiments used US$0.013798 according to the local ledger, but their evaluation artifacts are not part of this submission.
 
 ## Data-platform emphasis
 

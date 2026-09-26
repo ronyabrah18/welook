@@ -4,7 +4,7 @@
   "candidate_accounts": 425121,
   "hosted_accounts": 50000,
   "hosted_evidence_rows": 96113,
-  "ai_assessed_accounts": 0,
+  "ai_assessed_accounts": 2,
   "source_lines": 11768718,
   "accepted_observations": 11768718,
   "hosting_limit_applied": true

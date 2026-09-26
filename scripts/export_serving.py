@@ -10,12 +10,38 @@ import duckdb
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def validate_reviewed_assessments(source: duckdb.DuckDBPyConnection, path: Path) -> None:
+    """Fail the export if a published AI claim lacks visible source evidence."""
+    for line_number, line in enumerate(path.read_text().splitlines(), 1):
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("review_status") != "reviewed_for_demo":
+            continue
+        domain = record["candidate_domain"]
+        result = record["result"]
+        decision = result["decision"]
+        evidence_ids = result["evidence_ids"]
+        account = source.execute(
+            "SELECT attribution_status FROM serving.accounts WHERE candidate_domain = ?", [domain]
+        ).fetchone()
+        if account is None or decision not in {"supported", "needs_review", "insufficient_evidence"}:
+            raise ValueError(f"Invalid reviewed assessment on line {line_number}: account or decision")
+        if decision == "supported" and account[0] == "provider_only":
+            raise ValueError(f"Provider-only account cannot receive supported AI claim: {domain}")
+        available_ids = {f"source-line-{row[0]}" for row in source.execute(
+            "SELECT source_line FROM serving.evidence WHERE candidate_domain = ?", [domain]
+        ).fetchall()}
+        if not evidence_ids or not set(evidence_ids).issubset(available_ids):
+            raise ValueError(f"Reviewed assessment cites evidence absent from serving snapshot: {domain}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=ROOT / "artifacts" / "warehouse" / "sales.duckdb")
     parser.add_argument("--output", type=Path, default=ROOT / "app" / "data" / "welook_serving.duckdb")
     parser.add_argument("--limit", type=int, default=50_000)
-    parser.add_argument("--assessments", type=Path, default=ROOT / "artifacts" / "ai" / "assessments.jsonl")
+    parser.add_argument("--assessments", type=Path, default=ROOT / "app" / "data" / "reviewed_assessments.jsonl")
     args = parser.parse_args()
     if args.limit < 1:
         parser.error("--limit must be positive")
@@ -61,6 +87,7 @@ def main():
             WHERE rank_in_account <= 3
         """)
         if args.assessments.exists() and args.assessments.stat().st_size:
+            validate_reviewed_assessments(source, args.assessments)
             assessment_path = str(args.assessments.resolve()).replace("'", "''")
             source.execute(f"""
                 CREATE TABLE serving.assessments AS
@@ -68,8 +95,12 @@ def main():
                        result.reason AS reason, result.next_action AS next_action,
                        result.evidence_ids AS evidence_ids, prompt_version, model,
                        assessed_at_utc
-                FROM read_json_auto('{assessment_path}', format='newline_delimited')
-                WHERE status IN ('completed', 'cache_hit') AND result.decision IS NOT NULL
+                FROM read_json_auto('{assessment_path}', format='newline_delimited') ai
+                JOIN serving.accounts a USING (candidate_domain)
+                WHERE status IN ('completed', 'cache_hit')
+                  AND review_status = 'reviewed_for_demo'
+                  AND result.decision IS NOT NULL
+                  AND NOT (result.decision = 'supported' AND a.attribution_status = 'provider_only')
                 QUALIFY row_number() OVER (PARTITION BY candidate_domain
                     ORDER BY assessed_at_utc DESC) = 1
             """)

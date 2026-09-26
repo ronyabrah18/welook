@@ -1,6 +1,6 @@
 # WeLook: system design
 
-**Design v2 · 25 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/). Reviewer invitations remain outstanding. The optional offline LLM workflow has no published decisions or quality evaluation.
+**Design v2 · 26 September 2026.** The full source has been ingested and modelled locally. The Streamlit app is deployed against the full-run serving export at [welook.streamlit.app](https://welook.streamlit.app/). Reviewer invitations remain outstanding. Two offline LLM examples are published for demonstration; no submitted quality evaluation exists.
 
 ## What the salesperson gets
 
@@ -61,9 +61,9 @@ The queue uses three practical states: **investigate first** (relevant evidence 
 
 ## One bounded AI workflow
 
-The LLM assesses a **small, selected account-evidence bundle** where rules cannot confidently interpret attribution. Its structured result is `supported`, `needs_review`, or `insufficient_evidence`, with source observation IDs, a short reason, and the next research step. `Supported` means the supplied evidence supports the association; it is not external verification. Invalid references or schema failures go to review. Every other eligible account still appears with a rule-only status. No LLM call happens per raw row or app page view.
+The LLM assesses a **small, selected account-evidence bundle** where rules cannot confidently interpret attribution. Its structured result is `supported`, `needs_review`, or `insufficient_evidence`, with source observation IDs, a short reason, and the next research step. `Supported` means the supplied evidence supports the association; it is not external verification. Invalid references or schema failures go to review. Every other eligible account still appears with a rule-only status. No LLM call happens per raw row or app page view. The app's AI examples tab shows two offline, traced decisions: `qasource.com` has matching host and certificate evidence, while `perforce.com` needs review because the HTTP host is on a third-party domain despite a matching certificate. Their cited source lines appear in the serving evidence.
 
-The workflow is packaged as `skills/account-research/SKILL.md` with its trigger, input/output contract, dependent prompts, and worked example. Immutable prompt files in `prompts/` support future comparison. This repository does **not** include the requested hand-labelled eval set, one-command quality harness, or measured prompt-quality results. That is a known take-home gap. Until those checks and a manual unsupported-claim audit exist, AI outputs remain research suggestions and do not change outreach eligibility.
+The workflow is packaged as `skills/account-research/SKILL.md` with its trigger, input/output contract, dependent prompts, and worked example. Immutable prompt files in `prompts/` support future comparison. The serving export reads only the explicitly reviewed-for-display file, not the raw local assessment log, and blocks a `supported` AI claim on an account tagged `provider_only`. This guard addresses a real observed error: the model called `mybigcommerce.com` supported even though the account rules classify it as a platform domain. The two displayed decisions are examples audited for consistency with their cited evidence, **not** a measured quality claim. This repository does **not** include the requested hand-labelled eval set, one-command quality harness, or measured prompt-quality results. That is a known take-home gap. AI outputs remain research suggestions and do not change outreach eligibility.
 
 Every model attempt writes a JSONL trace with request/evidence IDs, response, model, prompt/schema version, latency, token usage, calculated cost, validation outcome, and decision/error. Raw traces stay local; redacted examples and metrics can go in the repo. Cache results by evidence hash, prompt version, model, and schema version. Website and banner text are untrusted input, never instructions.
 
@@ -88,7 +88,7 @@ This local design maps cleanly to a future S3 landing/Parquet lake, scheduled co
 
 1. **Done:** stream the full file into bronze, rebuild silver from bronze, reconcile 11,768,718 rows, and exercise incremental, replay, and quarantine fixtures.
 2. **Done:** build and test 425,121 candidate domains with dbt, then export an approximately 21 MB serving snapshot and run the Streamlit app locally.
-3. **Partly done:** the traced, budgeted offline AI adapter exists, but it has no submitted labelled evaluation or published app decisions.
+3. **Partly done:** the traced, budgeted offline AI adapter exists and two examples are visible in the app, but it has no submitted labelled evaluation.
 4. **Partly done:** Streamlit is deployed and the hosted queue runs. Next, invite reviewers and verify their access.
 
 The [planning document](planning.md) explains the sales use cases and desk research.

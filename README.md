@@ -10,7 +10,7 @@ WeLook turns the supplied internet-service observations into an evidence-backed 
 
 [Download the editable Excalidraw diagram](docs/diagrams/welook-architecture.excalidraw) and open it in Excalidraw to move or annotate each component.
 
-The solid path is running end to end. The optional AI workflow is offline; no AI assessments are in the hosted snapshot yet. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
+The full data path is running end to end. Two reviewed-for-display, offline AI research examples are included in the hosted snapshot; the rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
 
 ## What has been built
 
@@ -18,7 +18,7 @@ The solid path is running end to end. The optional AI workflow is offline; no AI
 - Built 9,335,329 domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. All 14 dbt model/test steps passed on the full run.
 - Exported an approximately 21 MB read-only serving snapshot with the top 50,000 candidates and 96,113 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
 - Deployed the Streamlit account queue, research queue, evidence detail, session shortlist, and CSV export; verified the hosted app starts against the full serving snapshot.
-- Added a reusable account-research skill, two prompt versions, and budgeted/traced offline API code. A labelled evaluation set and prompt-quality results are **not included**, so the AI assessment is not presented as validated.
+- Added a reusable account-research skill, two prompt versions, and budgeted/traced offline API code. The app displays two traced examples, including one uncertain attribution case. A labelled evaluation set and prompt-quality results are **not included**, so the AI assessment is not presented as validated.
 
 The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
 
@@ -40,7 +40,7 @@ The pipeline registers immutable source-file checksums. A repeated completed fil
 uv run python -m unittest discover -s tests -v
 ```
 
-The optional AI workflow selects ambiguous accounts offline. `uv run python scripts/enrich_accounts.py --limit 100` previews selected evidence bundles without an API call. After setting `OPENAI_API_KEY` in the ignored `.env`, `--live` makes budgeted calls and writes local traces. Outputs require manual verification before use; no labelled quality evaluation is supplied. Publishing cached decisions in the app would require a quality review first. API billing is separate from a ChatGPT/Codex subscription.
+The optional AI workflow selects ambiguous accounts offline. `uv run python scripts/enrich_accounts.py --limit 100` previews selected evidence bundles without an API call. After setting `OPENAI_API_KEY` in the ignored `.env`, `--live` makes budgeted calls and writes local traces. Only explicitly reviewed-for-display records in `app/data/reviewed_assessments.jsonl` enter the serving export; routine local outputs do not publish automatically. These are examples, not a labelled quality evaluation. API billing is separate from a ChatGPT/Codex subscription.
 
 ## Submission documents
 

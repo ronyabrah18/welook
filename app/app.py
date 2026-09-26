@@ -112,7 +112,9 @@ if int(info.hosted_accounts) < int(info.candidate_accounts):
     st.info("This hosted view shows a ranked subset. The local pipeline processed the full source; "
             "the account count above shows the complete candidate universe.")
 
-prospects, research, saved, method = st.tabs(["Prospect queue", "Research queue", "Shortlist & export", "How to read this"])
+prospects, research, ai_examples, saved, method = st.tabs(
+    ["Prospect queue", "Research queue", "AI research examples", "Shortlist & export", "How to read this"]
+)
 
 with prospects:
     left, middle, right = st.columns([2, 2, 2])
@@ -170,6 +172,29 @@ with research:
     review = account_rows("", ["research", "low_evidence"], ["partial", "unresolved", "provider_only"], 100)
     st.dataframe(review, hide_index=True, width="stretch")
 
+with ai_examples:
+    st.subheader("Offline account-research examples")
+    st.write("A small model reviews selected service evidence and suggests whether it can be linked to a "
+             "candidate domain. These two checked examples show the output in the product; they are "
+             "not a measured quality evaluation or permission to contact an account.")
+    examples = query(
+        "SELECT candidate_domain, decision, reason, next_action, prompt_version "
+        "FROM assessments ORDER BY candidate_domain"
+    )
+    if len(examples):
+        st.dataframe(examples, hide_index=True, width="stretch")
+        example_domain = st.selectbox("Inspect AI example and source evidence", examples["candidate_domain"].tolist())
+        _, example_evidence, example_assessment = account_detail(example_domain)
+        example = example_assessment.iloc[0]
+        st.write(f"**Model decision:** {example.decision} · **Prompt:** {example.prompt_version} · "
+                 f"**Model:** {example.model}")
+        st.write(f"**Why:** {example.reason}")
+        st.write(f"**Next research step:** {example.next_action}")
+        st.caption("Cited source IDs: " + ", ".join(example.evidence_ids))
+        st.dataframe(example_evidence, hide_index=True, width="stretch")
+    else:
+        st.info("No reviewed AI examples have been published in this snapshot.")
+
 with saved:
     st.subheader("Session shortlist")
     st.caption("Saved only in this browser session. Download the CSV to keep your work.")
@@ -194,4 +219,4 @@ with method:
     - **Vulnerability association:** A label supplied with the observation, not proof that the named business is affected.
     """)
     st.write("The source is one historical snapshot. We cannot infer a new exposure, live security posture, purchase intent, company territory, or a named decision-maker from it.")
-    st.caption("WeLook · Firmable take-home prototype · Rule-only queue until evaluated AI assessments are published.")
+    st.caption("WeLook · Firmable take-home prototype · Rule-derived queue with advisory offline AI examples.")
