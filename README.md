@@ -8,7 +8,7 @@ The pipeline processed all **11,768,718 observations** in the 12.44 GB compresse
 
 ## What you can do
 
-- Filter a research queue by domain, priority, scanner signal, and observed product.
+- Filter the queue by domain, priority, why it surfaced, and observed product.
 - Inspect the observations and scanner-listed vulnerability IDs behind a candidate's priority.
 - Read a cited offline AI summary where one is available; rules determine priority for every candidate.
 - Shortlist domains, save a research status and sourced company name, and download a cited CSV handoff. Shortlists and saved research updates last for the browser session only.
@@ -41,12 +41,12 @@ flowchart TB
         subgraph analytics["Gold / analytics schema · DuckDB"]
             STG["1. stg_observations · dbt<br/>11,768,718 rows"] --> E["2. int_account_evidence · dbt<br/>9,334,905 domain-observation rows"]
             E --> A["3. fct_accounts · dbt<br/>425,121 candidate domains"]
-            GA["4. account_ai_assessments<br/>46 published notes"]
+            GA["4. account_ai_assessments<br/>46 published summaries"]
         end
 
         R --> STG
-        E --> SEL["Select compact evidence bundles"]
-        A --> SEL
+        E -->|Attach top 3 evidence rows| SEL["Build compact AI bundles"]
+        A -->|Choose accounts by tier and score| SEL
         SEL --> AI["Offline LLM · GPT-4.1 mini"]
         AI --> C["Traces + cache<br/>SQLite US$10 spend ceiling"]
         AI --> P["Publication checks<br/>Citations · wording · freshness"]
