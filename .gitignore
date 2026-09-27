@@ -2,6 +2,9 @@
 /artifacts/
 /.venv/
 /.uv-cache/
+/.ruff_cache/
+/.pytest_cache/
+/.ipynb_checkpoints/
 /.env
 __pycache__/
 .DS_Store

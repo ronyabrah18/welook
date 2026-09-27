@@ -27,7 +27,7 @@ Filters work together. **Reset filters** returns to the default queue and keeps 
 - **Needs research:** weaker evidence, such as a one-field match with scanner labels or an admin/login title.
 - **Low evidence:** remaining candidates, available through All candidates. Low evidence does not mean secure.
 
-Priority sorts first. Within a tier, a higher **research score** puts stronger observations earlier. The score adds 20 for each matching domain field, 30 for a scanner-verified label (otherwise 5 for unverified metadata), 10 for an admin/login title, and 5 for a recorded product field. A domain uses its highest observation score, not the sum of its services. Current scores range from 0 to 85. This is not a risk percentage or likelihood to buy.
+Priority sorts first. Within a tier, a higher **research score** puts stronger observations earlier. The score adds 20 for each matching domain field, 30 for a scanner-verified label (otherwise 5 for unverified metadata), 10 for an admin/login title, and 5 for a recorded product field. A domain uses its highest observation score, not the sum of its services. The formula can produce 0–85; this full run observed 0–75. This is not a risk percentage or likelihood to buy.
 
 #### Reading the evidence
 
