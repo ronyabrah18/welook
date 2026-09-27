@@ -56,31 +56,21 @@ def account_rows(search: str, view: str, signal: str, product: str = "", limit: 
         params.append("%" + search.strip() + "%")
     if view == "Review queue":
         conditions.append("a.priority_tier IN ('investigate_first', 'review_next')")
-    elif view == "Investigate first":
-        conditions.append("a.priority_tier = 'investigate_first'")
-    elif view == "Review next":
-        conditions.append("a.priority_tier = 'review_next'")
     elif view == "Needs research":
         conditions.append("a.priority_tier = 'research'")
-    elif view == "AI suggestions":
-        conditions.append("assessment.candidate_domain IS NOT NULL")
     if product.strip():
         conditions.append("EXISTS (SELECT 1 FROM evidence e WHERE e.candidate_domain = a.candidate_domain "
                           "AND e.product ILIKE ?)")
         params.append("%" + product.strip() + "%")
-    signal_columns = {
-        "Strong scanner-verified signal": "a.directly_supported_verified_observation_count",
-        "Any scanner-verified signal": "a.verified_vulnerability_association_count",
-        "Admin or login page": "a.admin_or_login_observation_count",
-        "Any scanner finding": "a.vulnerability_association_count",
-    }
-    if signal != "Any reason":
-        conditions.append(f"{signal_columns[signal]} > 0")
+    if signal == "Scanner signal":
+        conditions.append("a.vulnerability_association_count > 0")
+    elif signal == "Admin or login page":
+        conditions.append("a.vulnerability_association_count = 0 AND a.admin_or_login_observation_count > 0")
     params.append(limit)
     return query(
         "SELECT a.candidate_domain, a.priority_tier, a.attribution_status, "
         f"{SIGNAL_CASE} AS research_signal, a.investigation_score, a.last_observed_at "
-        "FROM accounts a LEFT JOIN assessments assessment USING (candidate_domain) WHERE " + " AND ".join(conditions) +
+        "FROM accounts a WHERE " + " AND ".join(conditions) +
         " ORDER BY CASE a.priority_tier WHEN 'investigate_first' THEN 0 "
         "WHEN 'review_next' THEN 1 WHEN 'research' THEN 2 ELSE 3 END, "
         "a.investigation_score DESC, a.candidate_domain LIMIT ?",
@@ -181,13 +171,11 @@ st.subheader("Explore candidates")
 search_col, view_col, signal_col = st.columns([2, 1.2, 1.5])
 search = search_col.text_input("Find a domain", placeholder="e.g. 3ds.com", key="filter_search",
                                help="Search candidate domain names. Your other filters still apply.")
-view = view_col.selectbox("Queue", ["Review queue", "All candidates", "Investigate first",
-                                    "Review next", "Needs research", "AI suggestions"], key="filter_view",
+view = view_col.selectbox("Queue", ["Review queue", "Needs research", "All candidates"], key="filter_view",
                            help="Start with the review queue, or choose a broader group. See the User Guide for each queue.")
-signal = signal_col.selectbox("Why it surfaced", ["Any reason", "Strong scanner-verified signal",
-                                                   "Any scanner-verified signal", "Admin or login page",
-                                                   "Any scanner finding"], key="filter_signal",
-                              help="Keep domains with this historical signal. Scanner findings still need verification.")
+signal = signal_col.selectbox("Why it surfaced", ["Any reason", "Scanner signal", "Admin or login page"],
+                              key="filter_signal",
+                              help="Filter by the type of historical observation. Scanner findings still need verification.")
 product = st.text_input("Observed product (optional)", placeholder="e.g. cPanel",
                         key="filter_product",
                         help="Searches product names in the selected evidence shown by the app. "
@@ -298,7 +286,7 @@ if len(matches):
         with st.expander("Technical evidence details"):
             st.dataframe(evidence.drop(columns=["evidence_id"]), hide_index=True, width="stretch")
 else:
-    st.info("No candidate domains match these filters. Choose All candidates, clear the product search, "
+    st.info("No candidate domains match these filters. Choose Needs research or All candidates, clear the product search, "
             "or use Reset filters above. Filters are combined.")
 
 with st.sidebar:

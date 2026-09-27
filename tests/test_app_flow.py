@@ -1,7 +1,6 @@
 """Check the hosted snapshot supports the salesperson's core research flow."""
 
 import unittest
-import json
 import csv
 from io import StringIO
 
@@ -44,23 +43,28 @@ class AppFlowTest(unittest.TestCase):
         self.assertEqual(priority, 7)
         self.assertEqual(with_note, priority)
 
-    def test_ai_note_can_be_found_and_shortlisted(self):
+    def test_ai_summary_is_visible_and_account_can_be_shortlisted(self):
         app = AppTest.from_file(str(ROOT / "app" / "app.py"), default_timeout=30).run()
         self.assertFalse(app.exception)
         self.assertIn("Explore candidates", [heading.value for heading in app.subheader])
 
         view = next(control for control in app.selectbox if control.label == "Queue")
         self.assertEqual(view.value, "Review queue")
+        self.assertEqual(view.options, ["Review queue", "Needs research", "All candidates"])
+        signal = next(control for control in app.selectbox if control.label == "Why it surfaced")
+        self.assertEqual(signal.options, ["Any reason", "Scanner signal", "Admin or login page"])
         self.assertTrue(set(app.dataframe[0].value["Priority"]) <= {"Investigate first", "Review next"})
         self.assertEqual(list(app.dataframe[0].value.columns),
                          ["Domain", "Priority", "Why it surfaced", "Domain link", "Evidence score", "Last seen"])
-        view.set_value("AI suggestions").run()
-        self.assertFalse(app.exception)
-        report = json.loads((ROOT / "app" / "data" / "serving_report.json").read_text())
-        self.assertEqual(len(app.dataframe[0].value), report["ai_assessed_accounts"])
         self.assertTrue(any("AI research summary" in item.value for item in app.info))
         self.assertNotIn("AI sources and review details", [item.label for item in app.expander])
         self.assertNotIn("More filters", [item.label for item in app.expander])
+
+        view.set_value("Needs research").run()
+        signal = next(control for control in app.selectbox if control.label == "Why it surfaced")
+        signal.set_value("Admin or login page").run()
+        self.assertFalse(app.exception)
+        self.assertEqual(set(app.dataframe[0].value["Why it surfaced"]), {"Admin or login page observed"})
 
         next(button for button in app.button if button.label == "Add to shortlist").click().run()
         self.assertFalse(app.exception)

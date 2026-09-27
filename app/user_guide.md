@@ -14,8 +14,8 @@ Filters work together. **Reset filters** returns to the default queue and keeps 
 | Filter | Meaning |
 | --- | --- |
 | **Find a domain** | Search part of a candidate domain name. Other filters still apply. |
-| **Queue** | **Review queue** combines Investigate first and Review next. **All candidates** includes every priority tier in the hosted subset. **Investigate first**, **Review next**, and **Needs research** show one tier. **AI suggestions** shows domains with a published AI summary; it does not mean higher priority. |
-| **Why it surfaced** | Filter by a scanner signal or an observed admin/login page. **Strong scanner-verified signal** also requires a strong domain link. Scanner findings still need checking. |
+| **Queue** | **Review queue** contains the strongest candidates and combines Investigate first with Review next. **Needs research** contains weaker domain links or signals. **All candidates** includes every priority tier in the hosted subset. |
+| **Why it surfaced** | **Scanner signal** includes verified and unverified scanner metadata. **Admin or login page** shows candidates without scanner metadata whose page title contains an administration or login term; use it with the Needs research queue. The priority and Domain link columns show how strong the evidence is. |
 | **Observed product** | Search a scanner-reported product name, such as cPanel. It searches only the selected observations shown in the app, so a missing result does not prove the product is absent. |
 
 The **Domain link** column explains how the candidate domain relates to the service. **Strong** means both the website host and certificate match. **Partial** means one matches. **Weak** means neither directly matches. **Infrastructure provider** means the domain is on the known-provider list. None of these labels verifies a legal company or current service operator.

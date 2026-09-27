@@ -10,11 +10,7 @@ import duckdb
 SIGNAL_CASE = """CASE
     WHEN a.directly_supported_verified_observation_count > 0
         THEN 'Scanner-verified signal'
-    WHEN a.directly_supported_vulnerability_observation_count > 0
-        THEN 'Scanner signal to verify'
-    WHEN a.verified_vulnerability_association_count > 0
-        THEN 'Scanner-verified signal · link unclear'
-    WHEN a.vulnerability_association_count > 0 THEN 'Scanner signal · link unclear'
+    WHEN a.vulnerability_association_count > 0 THEN 'Scanner signal to verify'
     WHEN a.admin_or_login_observation_count > 0 THEN 'Admin or login page observed'
     ELSE 'Internet-facing service' END"""
 
