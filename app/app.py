@@ -16,27 +16,21 @@ DEFAULT_DB = Path(__file__).resolve().parent / "data" / "welook_serving.duckdb"
 DB = Path(os.environ.get("WELOOK_SERVING_DB", DEFAULT_DB))
 st.set_page_config(page_title="WeLook · Account research", page_icon="◉", layout="wide")
 
-MATCH_LABELS = {
-    "Any match": "Any match",
-    "supported": "Both fields match",
-    "partial": "One field matches",
-    "unresolved": "No direct match",
-    "provider_only": "Known provider domain",
-}
-AI_LABELS = {
-    "supported": "Historical association supported",
-    "needs_review": "Needs review",
-    "insufficient_evidence": "Insufficient evidence",
+DOMAIN_LINK_LABELS = {
+    "supported": "Strong · host + certificate",
+    "partial": "Partial · host or certificate",
+    "unresolved": "Weak · no direct domain match",
+    "provider_only": "Infrastructure provider",
 }
 PRIORITY_LABELS = {
-    "investigate_first": "Investigate First",
-    "review_next": "Review Next",
-    "research": "Needs Research",
-    "low_evidence": "Low Evidence",
+    "investigate_first": "Investigate first",
+    "review_next": "Review next",
+    "research": "Needs research",
+    "low_evidence": "Low evidence",
 }
 FILTER_DEFAULTS = {
-    "filter_search": "", "filter_view": "Review queue", "filter_signal": "Any signal",
-    "filter_direct": False, "filter_match": "Any match", "filter_product": "",
+    "filter_search": "", "filter_view": "Review queue", "filter_signal": "Any reason",
+    "filter_product": "",
 }
 
 
@@ -54,8 +48,7 @@ def query(sql: str, params: list | None = None):
         st.stop()
 
 
-def account_rows(search: str, view: str, signal: str, direct_only: bool,
-                 attribution: str, product: str = "", limit: int = 100):
+def account_rows(search: str, view: str, signal: str, product: str = "", limit: int = 100):
     conditions = ["1=1"]
     params: list = []
     if search:
@@ -69,24 +62,19 @@ def account_rows(search: str, view: str, signal: str, direct_only: bool,
         conditions.append("a.priority_tier = 'review_next'")
     elif view == "Needs research":
         conditions.append("a.priority_tier = 'research'")
-    elif view == "AI notes":
+    elif view == "AI suggestions":
         conditions.append("assessment.candidate_domain IS NOT NULL")
-    if attribution != "Any match":
-        conditions.append("a.attribution_status = ?")
-        params.append(attribution)
-    if direct_only:
-        conditions.append("a.attribution_status = 'supported'")
     if product.strip():
         conditions.append("EXISTS (SELECT 1 FROM evidence e WHERE e.candidate_domain = a.candidate_domain "
                           "AND e.product ILIKE ?)")
         params.append("%" + product.strip() + "%")
     signal_columns = {
-        "Direct verified label": "a.directly_supported_verified_observation_count",
-        "Any scanner-verified label": "a.verified_vulnerability_association_count",
-        "Admin/login page": "a.admin_or_login_observation_count",
-        "Vulnerability metadata": "a.vulnerability_association_count",
+        "Strong scanner-verified signal": "a.directly_supported_verified_observation_count",
+        "Any scanner-verified signal": "a.verified_vulnerability_association_count",
+        "Admin or login page": "a.admin_or_login_observation_count",
+        "Any scanner finding": "a.vulnerability_association_count",
     }
-    if signal != "Any signal":
+    if signal != "Any reason":
         conditions.append(f"{signal_columns[signal]} > 0")
     params.append(limit)
     return query(
@@ -174,15 +162,15 @@ c2.metric("Available to explore", f"{int(info.hosted_accounts):,}")
 c3.metric("In the review queue", f"{first_count + review_next_count:,}")
 st.caption(
     f"{first_count:,} investigate first · {review_next_count:,} review next · "
-    f"{int(info.ai_assessed_accounts):,} published AI research notes"
+    f"{int(info.ai_assessed_accounts):,} AI summaries available"
 )
 st.info("Start with the review queue. These historical signals need checking: "
         "confirm the business, service operator, and technical finding before outreach.")
 if int(info.hosted_accounts) < int(info.candidate_accounts):
     st.caption("You are exploring a ranked subset of all analysed domains.")
 if int(info.stale_ai_notes_skipped):
-    st.info(f"{int(info.stale_ai_notes_skipped)} offline AI notes were withheld after a new source file arrived. "
-            "The account queue remains rule-based until those notes are reassessed.")
+    st.info(f"{int(info.stale_ai_notes_skipped)} offline AI summaries were withheld after a new source file arrived. "
+            "The account queue remains rule-based until those summaries are reassessed.")
 
 with st.expander("User Guide · How to use WeLook"):
     st.markdown(Path(__file__).with_name("user_guide.md").read_text(encoding="utf-8"))
@@ -193,47 +181,38 @@ st.subheader("Explore candidates")
 search_col, view_col, signal_col = st.columns([2, 1.2, 1.5])
 search = search_col.text_input("Find a domain", placeholder="e.g. 3ds.com", key="filter_search",
                                help="Search candidate domain names. Your other filters still apply.")
-view = view_col.selectbox("View", ["Review queue", "All candidates", "Investigate first",
-                                   "Review next", "Needs research", "AI notes"], key="filter_view",
-                          help="Start with the review queue, or choose a broader group. See the User Guide for each view.")
-signal = signal_col.selectbox("Technical signal", ["Any signal", "Direct verified label",
-                                                    "Any scanner-verified label", "Admin/login page",
-                                                    "Vulnerability metadata"], key="filter_signal",
-                               help="Keep domains with this scanner signal. A label is a finding to check, not a confirmed issue.")
-with st.expander("More filters"):
-    direct_only = st.toggle(
-        "Direct domain matches only",
-        key="filter_direct",
-        help="Both HTTP host and certificate match a candidate domain in at least one observation. "
-             "This does not verify a legal business or service operator.",
-    )
-    attribution = st.selectbox("Evidence match", list(MATCH_LABELS),
-                               format_func=MATCH_LABELS.get, key="filter_match",
-                               help="Compares the domain with the observed website host and certificate name. "
-                                    "Filters combine: use Any match with the direct-only switch to avoid conflicts.")
-    product = st.text_input("Product in selected evidence", placeholder="e.g. cPanel",
-                            key="filter_product",
-                            help="Searches product names in the up-to-three evidence rows retained per hosted domain. "
-                                 "A missing match does not mean a company does not use the product.")
+view = view_col.selectbox("Queue", ["Review queue", "All candidates", "Investigate first",
+                                    "Review next", "Needs research", "AI suggestions"], key="filter_view",
+                           help="Start with the review queue, or choose a broader group. See the User Guide for each queue.")
+signal = signal_col.selectbox("Why it surfaced", ["Any reason", "Strong scanner-verified signal",
+                                                   "Any scanner-verified signal", "Admin or login page",
+                                                   "Any scanner finding"], key="filter_signal",
+                              help="Keep domains with this historical signal. Scanner findings still need verification.")
+product = st.text_input("Observed product (optional)", placeholder="e.g. cPanel",
+                        key="filter_product",
+                        help="Searches product names in the selected evidence shown by the app. "
+                             "A missing match does not prove that a company does not use the product.")
 st.button("Reset filters", on_click=reset_filters,
           help="Return to the default review queue. Your shortlist is kept.")
 
 with st.spinner("Loading candidates…"):
-    matches = account_rows(search, view, signal, direct_only, attribution, product)
+    matches = account_rows(search, view, signal, product)
 if len(matches):
-    st.caption(f"Showing {len(matches):,} results (up to 100), ordered by priority, then research score. "
+    st.caption(f"Showing {len(matches):,} results (up to 100), ordered by priority, then evidence score. "
                "The first result opens below; select another row to review it.")
     display = matches.rename(columns={
         "candidate_domain": "Domain", "priority_tier": "Priority",
-        "attribution_status": "Match", "research_signal": "Research signal",
-        "investigation_score": "Research score", "last_observed_at": "Last observed",
+        "attribution_status": "Domain link", "research_signal": "Why it surfaced",
+        "investigation_score": "Evidence score", "last_observed_at": "Last seen",
     }).copy()
     display["Priority"] = display["Priority"].map(PRIORITY_LABELS)
-    display["Match"] = display["Match"].map(MATCH_LABELS)
+    display["Domain link"] = display["Domain link"].map(DOMAIN_LINK_LABELS)
+    display["Last seen"] = display["Last seen"].astype(str).str[:10]
+    display = display[["Domain", "Priority", "Why it surfaced", "Domain link", "Evidence score", "Last seen"]]
     choice = st.dataframe(display, hide_index=True, width="stretch", height=360,
                           on_select="rerun", selection_mode="single-row",
-                          column_config={"Research score": st.column_config.NumberColumn(
-                              "Research score", help="Strength of the best observation. Priority tier sorts first. "
+                          column_config={"Evidence score": st.column_config.NumberColumn(
+                              "Evidence score", help="Strength of the best observation. Priority tier sorts first. "
                               "This is not a risk percentage or purchase probability; see the User Guide.")})
     selected_rows = choice.selection.rows
     selected_index = selected_rows[0] if selected_rows and selected_rows[0] < len(matches) else 0
@@ -243,12 +222,11 @@ if len(matches):
     with st.container(border=True):
         st.subheader(domain)
         st.caption(f"{PRIORITY_LABELS[row.priority_tier]} · "
-                   f"{MATCH_LABELS[row.attribution_status]} · "
+                   f"{DOMAIN_LINK_LABELS[row.attribution_status]} · "
                    f"Last observed {str(row.last_observed_at)[:10]}")
-        st.write(f"**Why it is in the queue:** {research_reason(row)}")
-        st.write(f"**Next research step:** {row.next_action}")
-        st.write("**Role to research:** IT or security owner. The dataset has no named contact. "
-                 "Confirm who operates this service before choosing a person to contact.")
+        st.write(f"**Why it surfaced:** {research_reason(row)}")
+        st.write(f"**Suggested next check:** {row.next_action}")
+        st.write("**Likely buyer role:** Security or IT owner. Verify who operates the service before choosing a contact.")
         if st.button("Add to shortlist", disabled=domain in st.session_state.shortlist):
             st.session_state.shortlist.append(domain)
             st.rerun()
@@ -286,15 +264,15 @@ if len(matches):
                         st.success("Research update saved for export.")
         if len(assessment):
             ai = assessment.iloc[0]
-            st.info(f"**AI research note · {AI_LABELS[ai.decision]}:** {ai.reason} Next: {ai.next_action}")
-            st.caption("Advisory only; this note does not change the priority or verify ownership.")
-            with st.expander("AI sources and review details"):
-                st.write(", ".join(ai.evidence_ids))
-                st.caption(f"Prompt {ai.prompt_version} · {ai.model} · {ai.review_status}")
+            st.info(f"**AI research summary**\n\n{ai.reason}\n\n**Suggested next check:** {ai.next_action}")
+            evidence_count = len(ai.evidence_ids)
+            st.caption(f"Generated offline from {evidence_count} selected historical "
+                       f"observation{'s' if evidence_count != 1 else ''} shown below and checked before publication. "
+                       "Advisory only—verify before outreach.")
         else:
-            st.caption("Rules only: no published AI note is available for this domain.")
+            st.caption("Rules only: no AI research summary is available for this domain.")
 
-        st.markdown("**Selected source evidence**")
+        st.markdown("**Evidence to verify**")
         st.caption("Up to three observations are shown. Scanner labels and domain matches are evidence, "
                    "not proof that the business is affected.")
         compact_evidence = evidence.assign(
@@ -317,8 +295,8 @@ if len(matches):
         st.dataframe(compact_evidence, hide_index=True, width="stretch")
         st.caption("Scanner-listed IDs are historical metadata. Check each finding against the current "
                    "service and operator; a listed ID is not a confirmed vulnerability.")
-        with st.expander("Full source fields and evidence IDs"):
-            st.dataframe(evidence, hide_index=True, width="stretch")
+        with st.expander("Technical evidence details"):
+            st.dataframe(evidence.drop(columns=["evidence_id"]), hide_index=True, width="stretch")
 else:
     st.info("No candidate domains match these filters. Choose All candidates, clear the product search, "
             "or use Reset filters above. Filters are combined.")

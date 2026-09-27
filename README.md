@@ -4,13 +4,13 @@
 
 **[Open the app](https://welook.streamlit.app/)** · [Architecture](docs/architecture.md) · [Product plan](#product-plan) · [Development reflection](docs/how-i-built.md)
 
-The pipeline processed all **11,768,718 observations** in the 12.44 GB compressed source and derived **425,121 candidate domains**. The hosted snapshot contains the top **50,000 domains**, **96,107 selected evidence rows**, and **46 published AI research notes**. These are historical research signals; they do not establish current vulnerabilities, verified company ownership, or buying intent.
+The pipeline processed all **11,768,718 observations** in the 12.44 GB compressed source and derived **425,121 candidate domains**. The hosted snapshot contains the top **50,000 domains**, **96,107 selected evidence rows**, and **46 published AI research summaries**. These are historical research signals; they do not establish current vulnerabilities, verified company ownership, or buying intent.
 
 ## What you can do
 
-- Filter a research queue by domain, priority view, scanner signal, domain-match strength, and product name in selected evidence.
+- Filter a research queue by domain, priority, scanner signal, and observed product.
 - Inspect the observations and scanner-listed vulnerability IDs behind a candidate's priority.
-- Read a cited offline AI note where one is available; rules determine priority for every candidate.
+- Read a cited offline AI summary where one is available; rules determine priority for every candidate.
 - Shortlist domains, save a research status and sourced company name, and download a cited CSV handoff. Shortlists and saved research updates last for the browser session only.
 - Use the in-app **User Guide** for filter definitions and score explanations.
 
@@ -74,7 +74,7 @@ flowchart TB
     class Q reject
 ```
 
-Heavy processing and AI calls run locally. The hosted app reads the exported snapshot; page views make no LLM calls. The four main analytics tables keep clean observations, domain-level evidence, account priorities, and published AI notes separate. New immutable files append Bronze/Silver data and rebuild the derived tables; repeated completed files are skipped. See the [architecture document](docs/architecture.md) for the `3ds.com` example, quality gates, incremental loading, and cost controls.
+Heavy processing and AI calls run locally. The hosted app reads the exported snapshot; page views make no LLM calls. The four main analytics tables keep clean observations, domain-level evidence, account priorities, and published AI summaries separate. New immutable files append Bronze/Silver data and rebuild the derived tables; repeated completed files are skipped. See the [architecture document](docs/architecture.md) for the `3ds.com` example, quality gates, incremental loading, and cost controls.
 
 ## Run the app
 
@@ -115,7 +115,7 @@ Only the AI client loads `.env`. Export other environment variables in your shel
 | Needs research | Weaker evidence, including one-sided matches or admin/login titles. |
 | Low evidence | Remaining candidates; available through All candidates. |
 
-Priority sorts before the **research score**. The score uses the strongest observation's domain matches, scanner labels, page title, and product field; it is not a purchase probability. [Exact rules and weights](docs/architecture.md#prioritisation) are documented. AI notes never change the priority.
+Priority sorts before the **evidence score**. The score uses the strongest observation's domain matches, scanner labels, page title, and product field; it is not a purchase probability. [Exact rules and weights](docs/architecture.md#prioritisation) are documented. AI summaries never change the priority.
 
 ## Project structure
 
@@ -146,7 +146,7 @@ V5 decision accuracy is 96% on the 25 selected cases, but the labels are Codex-p
 
 - A domain is not a verified organisation. Server country, provider names, and scanner flags cannot establish customer identity or current exposure.
 - Product search covers up to three selected observations per hosted domain, not a full technology inventory. Company territory, industry, contacts, and buying intent are unavailable.
-- AI notes cover 46 selected domains. The app and its CSV are research aids; findings need human verification.
+- AI summaries cover 46 selected domains. The app and its CSV are research aids; findings need human verification.
 - Incremental loading supports immutable file arrivals. Corrections, deletions, persistent team shortlists, and scheduled operation are future work.
 
 Next improvements would be independently reviewed eval labels, sourced business/operator enrichment, product aggregation across all evidence, and feedback from sales users. Account-level AI freshness checks and targeted mart updates would reduce repeat work for a recurring feed.

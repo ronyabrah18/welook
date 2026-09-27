@@ -49,14 +49,18 @@ class AppFlowTest(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertIn("Explore candidates", [heading.value for heading in app.subheader])
 
-        view = next(control for control in app.selectbox if control.label == "View")
+        view = next(control for control in app.selectbox if control.label == "Queue")
         self.assertEqual(view.value, "Review queue")
-        self.assertTrue(set(app.dataframe[0].value["Priority"]) <= {"Investigate First", "Review Next"})
-        view.set_value("AI notes").run()
+        self.assertTrue(set(app.dataframe[0].value["Priority"]) <= {"Investigate first", "Review next"})
+        self.assertEqual(list(app.dataframe[0].value.columns),
+                         ["Domain", "Priority", "Why it surfaced", "Domain link", "Evidence score", "Last seen"])
+        view.set_value("AI suggestions").run()
         self.assertFalse(app.exception)
         report = json.loads((ROOT / "app" / "data" / "serving_report.json").read_text())
         self.assertEqual(len(app.dataframe[0].value), report["ai_assessed_accounts"])
-        self.assertTrue(any("AI research note" in item.value for item in app.info))
+        self.assertTrue(any("AI research summary" in item.value for item in app.info))
+        self.assertNotIn("AI sources and review details", [item.label for item in app.expander])
+        self.assertNotIn("More filters", [item.label for item in app.expander])
 
         next(button for button in app.button if button.label == "Add to shortlist").click().run()
         self.assertFalse(app.exception)
@@ -104,9 +108,9 @@ class AppFlowTest(unittest.TestCase):
 
     def test_product_filter_only_returns_domains_with_selected_evidence(self):
         app = AppTest.from_file(str(ROOT / "app" / "app.py"), default_timeout=30).run()
-        next(control for control in app.selectbox if control.label == "View")\
+        next(control for control in app.selectbox if control.label == "Queue")\
             .set_value("All candidates").run()
-        next(control for control in app.text_input if control.label == "Product in selected evidence")\
+        next(control for control in app.text_input if control.label == "Observed product (optional)")\
             .set_value("cPanel").run()
         self.assertFalse(app.exception)
         domains = app.dataframe[0].value["Domain"].tolist()
