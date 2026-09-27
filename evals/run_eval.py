@@ -160,7 +160,9 @@ def score_version(cases: list[dict], predictions: list[dict], version: str) -> d
 def make_report(results: dict) -> str:
     previous, current = results["prompt_versions"]
     p, c = results["metrics"][previous], results["metrics"][current]
-    pct = lambda value: f"{value * 100:.1f}%"
+    def pct(value):
+        return f"{value * 100:.1f}%"
+
     rows = [
         "# Account-research prompt eval",
         "",

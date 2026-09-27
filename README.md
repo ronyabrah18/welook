@@ -1,56 +1,125 @@
-# WeLook — cybersecurity account research
+# WeLook
 
-WeLook turns the supplied internet-service observations into an evidence-backed candidate queue for a team selling external attack-surface monitoring. Reps start with a focused review queue, inspect the source observations, shortlist candidates, record a sourced company identity and research status, and export a cited CSV handoff. The strongest tier requires a scanner-verified label and a direct domain match on the same observation. A separate review-next tier contains direct matches with **unverified** scanner labels; a login page alone stays in research. Technical observations are leads for investigation, not confirmed vulnerabilities or buying intent.
+**Cybersecurity account research for sales teams.** WeLook turns the supplied internet-service observations into a ranked list of candidate domains for a team selling external attack-surface monitoring. A rep can inspect the evidence, record a researched company identity, and export a shortlist for sales review.
 
-**Hosted app:** [welook.streamlit.app](https://welook.streamlit.app/). The app is deployed from `main` and also runs locally from the committed serving snapshot.
+**[Open the app](https://welook.streamlit.app/)** · [Architecture](docs/architecture.md) · [Planning](docs/planning.md) · [Development reflection](docs/how-i-built.md)
 
-## How it works
+The pipeline processed all **11,768,718 observations** in the 12.44 GB compressed source and derived **425,121 candidate domains**. The hosted snapshot contains the top **50,000 domains**, **96,107 selected evidence rows**, and **46 published AI research notes**. These are historical research signals; they do not establish current vulnerabilities, verified company ownership, or buying intent.
 
-![WeLook architecture: full-source ingestion, silver quarantine, local warehouse, offline AI assessment, and hosted app](docs/diagrams/architecture_diagram.png)
+## What you can do
 
-The diagram shows the **current implementation**, including the separate quarantine side output from silver validation, where each layer lives, and how counts change. Regenerate it from the serving report with [render_architecture_diagram.py](scripts/render_architecture_diagram.py).
+- Filter a research queue by domain, priority view, scanner signal, domain-match strength, and product name in selected evidence.
+- Inspect the observations and scanner-listed vulnerability IDs behind a candidate's priority.
+- Read a cited offline AI note where one is available; rules determine priority for every candidate.
+- Shortlist domains, save a research status and sourced company name, and download a cited CSV handoff. Shortlists and saved research updates last for the browser session only.
+- Use the in-app **User Guide** for filter definitions and score explanations.
 
-The full data path is running end to end. A separate gold AI-assessment table holds 46 advisory offline research notes: 33 guarded batch notes for ambiguous accounts, four cautious direct-signal notes, two earlier reviewed examples, and seven individually reviewed `investigate_first` briefs. The serving snapshot copies only assessments for its hosted accounts. The rule-based queue remains authoritative. See the [system architecture](docs/architecture.md) for the data contracts, incremental-load behavior, and cost controls.
+## Architecture
 
-## What has been built
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontSize":"14px","fontFamily":"Arial"},"flowchart":{"rankSpacing":28,"nodeSpacing":30,"padding":10,"subGraphTitleMargin":{"top":8,"bottom":18}}}}%%
+flowchart TB
+    subgraph batch["Local batch · Python + uv"]
+        L["Source dataset<br/>JSONL.zst"] --> B["Bronze · Parquet<br/>Raw records + lineage"]
+        B --> S["Silver · Parquet<br/>Parse + validate"]
+        S --> G["Gold · DuckDB + dbt<br/>Domain links, signals, priority"]
+        S --> Q["Quarantine<br/>Rejected-record references"]
+        G -->|Selected domains| AI["Offline LLM<br/>GPT-4.1 mini"]
+        AI --> C["Local traces + cache<br/>SQLite spend ledger"]
+        AI --> P["Publication checks<br/>Citations, wording, freshness"]
+        P --> AG["Gold AI assessments<br/>Separate advisory table"]
+    end
+    G --> D["Serving snapshot<br/>Compact DuckDB file"]
+    AG --> D
+    D --> UI["Streamlit Community Cloud<br/>Filter, inspect, shortlist"]
+    UI --> U["Sales user<br/>Research brief CSV"]
 
-- Streamed the **entire 12.44 GB compressed source** into 656 bronze Parquet parts, then read those parts to build typed silver Parquet: 11,768,718 source, bronze, and accepted silver rows; zero rejected rows. The full v2 run took 3.4 minutes for bronze and 6.0 minutes for silver on a 48 GB laptop. Malformed records remain in bronze and are routed to a separate quarantine during silver validation.
-- Built 9,334,905 distinct domain-observation evidence links and 425,121 candidate domains with DuckDB/dbt. The final account model and its tests passed against the full-data warehouse. The `investigate_first` rule requires a direct match and scanner-verified association on the same observation: 7 candidates qualify. Another 5,411 have a direct match and an unverified scanner label on the same observation; they enter `review_next`, with the finding explicitly marked for verification. Weaker matches and login-only cases remain in research.
-- Exported an approximately 26 MB read-only serving snapshot with the top 50,000 candidates and 96,107 selected evidence rows. The app states that the hosted view is a ranked subset of the full processed universe.
-- Deployed a single-page Streamlit explorer that opens on the focused review queue, with a product-name filter, cited evidence, scanner-listed vulnerability IDs to verify, a session shortlist, and a CSV handoff. Every `review_next` candidate shows the observation and scanner-listed IDs behind its tier. A rep can record a researched company name and its source URL. The app requires both before a candidate can be marked **Ready for sales review**; this status never means confirmed service ownership or permission to contact. Session decisions are not persisted on the server.
-- Added a reusable account-research skill, five prompt versions, and budgeted/traced offline API code. Of 100 earlier v2 batch outputs, 33 cautious notes passed the publication gate and 67 overconfident `supported` outputs were withheld. A new 100-account v5 batch on direct matches cost US$0.054862 in recorded API usage; four notes passed the stricter wording gate and 96 were withheld because their phrasing could imply a confirmed vulnerability. Seven v4 top-tier drafts were reviewed and edited before publication. A separate gold table stores published notes; raw responses and traces remain local. AI notes do not change account priority.
-- Added a 25-case account-research eval with 22 source-derived bundles and three marked negative controls. On the same cases and pinned model, v5 improved decision accuracy from 60% (v4) to 96% and supported-decision precision from 41.2% to 100%. None of the ten unverified-direct v5 notes passed the strict wording gate, so this result supports the decision improvement but **not** automatic publication of prose. The exact outputs and limits are in [evals](evals/README.md).
+    style batch fill:#f8fafc,stroke:#cbd5e1,color:#16253a
+    classDef source fill:#fff3cc,stroke:#c89c31,color:#16253a
+    classDef data fill:#e6effb,stroke:#6c91bd,color:#16253a
+    classDef ai fill:#e4f3e9,stroke:#68a780,color:#16253a
+    classDef app fill:#eee8f9,stroke:#a087c4,color:#16253a
+    classDef reject fill:#fff0df,stroke:#c68b42,color:#16253a
+    class L source
+    class B,S,G,D data
+    class AI,P,AG,C ai
+    class UI,U app
+    class Q reject
+```
 
-The source file, full bronze/silver data, analytical build database, API secrets, and raw traces are not in Git. The compact serving snapshot is included for a reproducible app demo.
+Heavy processing and AI calls run locally. The hosted app reads the exported snapshot; page views make no LLM calls. New immutable files append bronze/silver data, then rebuild the derived marts. Repeated completed files are skipped. See [architecture and operating commands](docs/architecture.md) for replay, quality gates, AI publication, and cost controls.
 
-## Run locally
+## Run the app
 
-Requires Python 3.12, [uv](https://docs.astral.sh/uv/), and the `zstd` command for the full compressed input. Place the supplied file at `b2_download_file_by_id` in this repo, or pass its path with `--input`.
+Requires **Python 3.12** and **[uv](https://docs.astral.sh/uv/getting-started/installation/)**. The bundled serving file is enough to run the demo; no source download or API key is needed.
 
 ```bash
-uv sync --locked --cache-dir .uv-cache
-uv run python scripts/run_pipeline.py
+git clone https://github.com/ronyabrah18/welook.git
+cd welook
+uv sync --locked
 uv run streamlit run app/app.py
 ```
 
-The pipeline registers immutable source-file checksums. A repeated completed file skips both bronze and silver; a completed bronze run can build or retry silver without the landing file. Run `uv run python scripts/run_pipeline.py --input /path/to/new-arrival.jsonl.zst` for each new immutable arrival. Its silver parts join the registered source, then dbt rebuilds the account marts, validates curated AI notes into a separate gold table, and atomically replaces the serving snapshot. When a source is rebuilt with a newer schema, DuckDB registers only the latest complete version. An end-to-end two-file fixture checks account updates, duplicate-domain normalization, idempotence, and invalidation of stale AI notes. A replacement snapshot or deletion requires a separate source contract.
+Open the local URL printed by Streamlit. To rebuild from the supplied dataset, install the `zstd` command and run:
 
-## Checks and AI workflow
+```bash
+uv run python scripts/run_pipeline.py --input /path/to/source.jsonl.zst
+```
+
+The build writes local data under `artifacts/` and replaces the serving snapshot after validation. Keep enough disk space for the source, Parquet layers, and warehouse. The full run was completed on a laptop with 48 GB RAM; that is an observed environment, not a minimum requirement.
+
+## Configuration
+
+| Setting | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | Optional, for live offline AI batches/evals only. Copy `.env.example` to ignored `.env` and set the key locally. |
+| `WELOOK_SERVING_DB` | Optional environment variable overriding the app's default `app/data/welook_serving.duckdb`. |
+| `FIRMABLE_DB_PATH` | DuckDB path for direct dbt commands. The pipeline runner sets it automatically. |
+| `.streamlit/config.toml` | App theme. |
+
+Only the AI client loads `.env`. Export other environment variables in your shell when needed. Full source data, warehouse files, `.env`, and raw API traces are excluded from Git.
+
+## How prioritisation works
+
+| Priority | Rule |
+| --- | --- |
+| Investigate first | Matching website host and certificate, plus a scanner-verified label on the same observation. |
+| Review next | A direct match with an unverified scanner label, and no directly matched verified label. |
+| Needs research | Weaker evidence, including one-sided matches or admin/login titles. |
+| Low evidence | Remaining candidates; available through All candidates. |
+
+Priority sorts before the **research score**. The score uses the strongest observation's domain matches, scanner labels, page title, and product field; it is not a purchase probability. [Exact rules and weights](docs/architecture.md#prioritisation) are documented. AI notes never change the priority.
+
+## Project structure
+
+```text
+app/          Streamlit UI, User Guide, CSV export, bundled serving data
+scripts/      Profiling, ingestion, warehouse registration, AI and export commands
+transform/    dbt SQL models and data tests
+welook/       Shared LLM client and source-lineage utilities
+skills/       Reusable, versioned account-research workflow
+prompts/      Immutable account-research prompts v1–v5
+evals/        25 draft-labelled cases, predictions, comparison harness and results
+tests/        Pipeline, app, publication and LLM contract tests
+docs/         Planning, architecture/costs, and development reflection
+```
+
+## Validation and AI evaluation
 
 ```bash
 uv run python -m unittest discover -s tests -v
+uv run python evals/run_eval.py
 ```
 
-The one-command prompt comparison is `UV_CACHE_DIR=.uv-cache uv run --no-sync python evals/run_eval.py --live` after configuring the ignored API key; it uses the shared US$10 ledger and cached responses. `UV_CACHE_DIR=.uv-cache uv run --no-sync python evals/run_eval.py` re-scores the committed outputs for free. Review the proposed case labels in [label_review.md](evals/label_review.md) before describing them as independently human-validated.
+Both commands run without API calls. The eval command re-scores the committed v4/v5 predictions; [eval instructions](evals/README.md) explain live reruns. The [account-research skill](skills/account-research/SKILL.md) describes the reusable AI workflow.
 
-The optional AI workflow now selects `review_next` accounts by default. `uv run python scripts/enrich_accounts.py --limit 100` previews bundles without an API call, retaining only accounts whose displayed evidence contains the direct scanner label. Use `--segment ambiguous` for partial matches or `--segment investigate_first --limit 7` for the strongest current tier. After setting `OPENAI_API_KEY` in the ignored `.env`, `--live` makes budgeted calls and writes local traces. `uv run python scripts/publish_assessments.py` extracts only cautious batch outputs and combines them with individually reviewed examples. `scripts/register_ai_gold.py` checks citation visibility, supported attribution, review status, and source freshness before publishing `analytics.account_ai_assessments`; `scripts/export_serving.py` then copies the hosted subset. Raw local outputs never publish automatically. API billing is separate from a ChatGPT/Codex subscription.
+V5 decision accuracy is 96% on the 25 selected cases, but the labels are Codex-proposed drafts awaiting independent human review. Its unverified-label prose passed the strict wording gate on **0 of 10** cases. See the [measured results and limitations](evals/results.md); this is a decision-policy comparison, not evidence of vulnerability-detection accuracy.
 
-## Submission documents
+## Limitations and future improvements
 
-- [Planning and sales use cases](docs/planning.md)
-- [System architecture](docs/architecture.md)
-- [Skill](skills/account-research/SKILL.md) and [prompts](prompts/account-research/)
-- [Labelled eval, harness, and measured results](evals/README.md)
-- [How I built it reflection](docs/how-i-built.md)
+- A domain is not a verified organisation. Server country, provider names, and scanner flags cannot establish customer identity or current exposure.
+- Product search covers up to three selected observations per hosted domain, not a full technology inventory. Company territory, industry, contacts, and buying intent are unavailable.
+- AI notes cover 46 selected domains. The app and its CSV are research aids; findings need human verification.
+- Incremental loading supports immutable file arrivals. Corrections, deletions, persistent team shortlists, and scheduled operation are future work.
 
-The candidate domain is an evidence grouping key, not a resolved legal entity. Shared platforms, CDN infrastructure, scanner labels, and missing firmographics remain visible limitations.
+Next improvements would be independently reviewed eval labels, sourced business/operator enrichment, product aggregation across all evidence, and feedback from sales users. Account-level AI freshness checks and targeted mart updates would reduce repeat work for a recurring feed.

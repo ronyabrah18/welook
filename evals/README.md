@@ -2,23 +2,31 @@
 
 This evaluates the **offline AI research note**, not whether an organisation owns a service or needs to buy software. The labelled target is the note's `decision`: `supported` for a historical direct domain-service association with a scanner-verified label, `needs_review` for an unverified direct label or one-sided domain link, and `insufficient_evidence` when the supplied observations have no meaningful domain link. `supported` never means a confirmed current vulnerability.
 
-`labelled_cases.jsonl` contains **25 manually curated draft labels**: 22 compact, IP-redacted evidence bundles from the supplied snapshot and three clearly marked synthetic negative controls. Codex proposed the decisions after inspecting the evidence; they have not been independently human-adjudicated. Each record includes the expected decision, a written rationale, and acceptable supporting evidence IDs. [label_review.md](label_review.md) makes them easy for the applicant to review. Cases were deliberately chosen to challenge attribution and scanner-label wording; this is not a prevalence-weighted sample of all 425,121 candidate domains. The bundled inputs make the eval rerunnable without the 12.44 GB source file or local warehouse.
+`labelled_cases.jsonl` contains **25 draft-labelled cases**: 22 compact, IP-redacted evidence bundles from the supplied snapshot and three clearly marked synthetic negative controls. Codex proposed the decisions after inspecting the evidence; they have not been independently human-adjudicated. Each record includes the expected decision, a written rationale, and acceptable supporting evidence IDs. [label_review.md](label_review.md) makes them easy to review. Cases were deliberately chosen to challenge attribution and scanner-label wording; this is not a prevalence-weighted sample of all 425,121 candidate domains. The bundled inputs make the eval rerunnable without the 12.44 GB source file or local warehouse.
 
-Run the same 25 cases against the previous v4 prompt and the app's current v5 prompt, using the pinned production model and shared US$10 ledger:
+## Re-score saved predictions for free
 
-```bash
-UV_CACHE_DIR=.uv-cache uv run --no-sync python evals/run_eval.py --live
-```
-
-This command needs the ignored local `.env` API key and can make up to 50 paid calls; cached responses are reused. It writes exact model outputs to `predictions.jsonl` and the measured comparison to `results.json` and `results.md`. Every new API call uses the same structured-output schema, local trace, cache, and spend ceiling as the offline enrichment pipeline. If connectivity or a model call fails, the script leaves the prior complete comparison intact and writes partial outputs under ignored `artifacts/ai/` for inspection.
-
-After a successful live run, anyone can re-score the committed predictions with **no key and no API cost**:
+After `uv sync --locked`, run from the repository root:
 
 ```bash
-UV_CACHE_DIR=.uv-cache uv run --no-sync python evals/run_eval.py
+uv run python evals/run_eval.py
 ```
 
-The report gives three-class precision/recall/F1, exact decision accuracy, citation agreement with the reviewed evidence rows, and a lexical wording-gate rate for unverified direct labels. A missed/failed case counts against recall and overall accuracy. The wording gate catches specific overstatements but cannot establish that prose is safe or useful. The cases have no externally verified service-owner or vulnerability ground truth, so these metrics cannot measure real-world sales conversion or technical finding accuracy. Review false positives and generated prose before publishing any new note.
+This uses the committed predictions without an API key or paid calls. It verifies prompt/evidence hashes and rewrites `results.json` and `results.md` with the recalculated metrics and a new report timestamp. Saved predictions are unchanged.
+
+## Run the models again
+
+To compare the same 25 cases against v4 and the batch workflow's current v5 prompt:
+
+```bash
+uv run python evals/run_eval.py --live
+```
+
+This requires `OPENAI_API_KEY` in the ignored `.env` file and can make up to 50 paid calls, reusing cache entries when available. It uses the same pinned model, structured-output schema, traces, and shared US$10 ledger as offline enrichment. A successful run replaces `predictions.jsonl` and both reports. A failed run keeps the previous complete comparison and saves partial output under ignored `artifacts/ai/`.
+
+## Interpret the results
+
+The report gives three-class precision/recall/F1, exact decision accuracy, citation agreement with the labelled evidence anchors, and a lexical wording-gate rate for unverified direct labels. A missed/failed case counts against recall and overall accuracy. The wording gate catches specific overstatements but cannot establish that prose is safe or useful. The cases have no externally verified service-owner or vulnerability ground truth, so these metrics cannot measure real-world sales conversion or technical finding accuracy. Review false positives and generated prose before publishing any new note.
 
 In the final IP-redacted v4/v5 run, decision accuracy improved from **60% to 96%** and supported precision from **41.2% to 100%**. V5 still gave one no-link negative control `needs_review`, and **0 of 10** unverified-direct notes passed the strict publication wording gate. Several rejected notes called unverified scanner *labels* “vulnerabilities found”; the decision metric must not be read as note safety. Those outputs remain in this eval for inspection, not in the hosted app.
 

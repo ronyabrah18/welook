@@ -1,107 +1,123 @@
-# WeLook: system design
+# WeLook architecture
 
-**Design v3 · 26 September 2026.** The full source has been ingested and modelled locally. The Streamlit app serves the full-run export at [welook.streamlit.app](https://welook.streamlit.app/). The serving snapshot contains 46 advisory offline AI notes, including all seven `investigate_first` candidates and four cautiously published `review_next` notes.
+WeLook separates a local batch pipeline from a lightweight hosted app. The [architecture diagram](../README.md#architecture) shows the implemented flow. Python streams the source into Parquet, DuckDB/dbt builds candidate-domain marts, and Streamlit reads a compact exported database. There is no live scanner, scheduler, warehouse server, or API call on an app page view.
 
-## What the salesperson gets
+## Components and storage
 
-WeLook is a single-page account-research tool for a team selling **external attack-surface monitoring**. The default view is a bounded evidence-backed review queue; a rep selects a domain, checks why it merits investigation, records a sourced company identity and research status, then exports a cited handoff. A candidate domain is not a verified organisation, and the app does not claim that a business is vulnerable or ready to buy solely because a service was observed.
+| Component | Responsibility | Location |
+| --- | --- | --- |
+| Landing | Immutable supplied JSONL.zst file | Local input path; default `b2_download_file_by_id` |
+| Bronze | One row per source line: original text, or undecodable bytes, with file/record hashes and lineage | `artifacts/runs/<run-id>/bronze/*.parquet` |
+| Silver | Typed observations with core validation, selected nested fields, and original vulnerability metadata | `artifacts/runs/<run-id>/silver/*.parquet` |
+| Quarantine | Rejected-record IDs and reasons; original content remains in bronze | `artifacts/runs/<run-id>/quarantine.jsonl` |
+| Warehouse | Registered silver views, dbt models, ingestion registry and gold AI table | `artifacts/warehouse/full.duckdb` |
+| Offline AI | Selected bundles, raw results, JSONL traces, SQLite cache and spend ledger | Ignored `artifacts/ai/` |
+| Publication inputs | Curated notes, batch notes that passed checks, and legacy citation mapping | `app/data/*assessments.jsonl`, `legacy_ai_source.json` |
+| Serving | `accounts`, `evidence`, `assessments`, `build_info` | `app/data/welook_serving.duckdb` |
+| App | Read-only queries, browser-session shortlist and CSV handoff | `app/app.py`, Streamlit Community Cloud |
 
-The supplied snapshot is the core dataset: **11,768,718 service observations** in a 12.44 GB Zstandard-compressed JSONL file. The 5,000-row sample is for development only; the batch pipeline processes the full file. One service observation is not one company. Provider-owned infrastructure, shared hosting, and ambiguous domains require special care.
+`uv.lock` fixes the development dependencies. Hosting uses the smaller `app/requirements.txt`. Python generators and bounded PyArrow batches keep ingestion memory independent of the full decompressed file. DuckDB handles SQL aggregation; dbt supplies model dependencies and data tests. The sequential runner is sufficient for the supplied snapshot.
 
-## Data flow
+## Pipeline order and quality gates
 
-The [architecture diagram](diagrams/architecture_diagram.png) shows the current storage paths, record-count reductions, and the separate quarantine output of silver validation.
+[`scripts/run_pipeline.py`](../scripts/run_pipeline.py) executes these steps:
 
-```mermaid
-flowchart LR
-  L[Original JSONL.zst<br/>landing] --> B[Bronze Parquet<br/>full raw records + lineage]
-  B --> S[Silver Parquet<br/>validated observations + evidence]
-  S --> G[DuckDB + dbt<br/>candidate accounts + signals]
-  G --> A[Selected research or top-tier accounts<br/>offline LLM assessment]
-  A --> P[Publication gate<br/>citations + source-set lineage]
-  P --> AG[Gold AI assessments<br/>validated advisory notes]
-  G --> D[Small read-only<br/>serving DuckDB]
-  AG --> D
-  D --> U[Hosted Streamlit app<br/>filter, review, shortlist, export]
-  B -. invalid records during validation .-> Q[Quarantine + quality report]
+1. **Landing → bronze.** Hash the immutable input, stream-decompress it, and preserve each line with a globally unique source-record ID. Publish the bronze manifest after writing the parts.
+2. **Bronze → silver.** Read completed bronze parts, verify content hashes, parse JSON, and validate IP, port, transport, and timestamp. Record optional-field type issues; route parsing/core failures to quarantine.
+3. **Register silver.** Create `raw.observations` over completed arrivals and reconcile counts against `raw.ingestion_manifest` in a transaction.
+4. **Build and test dbt models.** `stg_observations` deduplicates content hashes; `int_account_evidence` normalises domains and evaluates source links; `fct_accounts` aggregates one candidate per domain and assigns priority.
+5. **Register gold AI assessments.** Validate existing publication inputs against current evidence and the source-set hash. This step does not call an LLM.
+6. **Export serving.** Write a pending database, copy the selected accounts and evidence, then atomically replace the app snapshot.
+
+The reconciliations are `source lines = bronze rows` and `bronze rows = silver rows + rejected rows`. Any parse/core rejection marks the run `needs_review` and stops the runner before downstream publication. dbt failures also stop release. Optional-field issues are recorded but do not automatically reject an otherwise valid row. The full supplied run accepted all 11,768,718 rows; fixtures exercise malformed data and quarantine.
+
+Bronze preserves line content without the line-ending bytes. Silver is a typed projection, not a second full copy of every JSON field: optional text is bounded and some fields are omitted. Source timestamps are preserved without an assumed timezone; timezone-aware inputs require an explicit policy. Records over 64 MiB stop ingestion rather than being truncated.
+
+## Incremental loading and recovery
+
+The contract is **new immutable files**, not CDC or replacement snapshots. Each file's checksum and schema version identify its run. A repeated completed file skips bronze and silver. A new file adds parts; registration uses all completed arrivals, choosing only the latest complete schema version for each source.
+
+The derived dbt marts are **fully rebuilt** from cumulative silver. This is incremental source loading with a full mart refresh. Corrections and deletions need a future snapshot/retraction contract.
+
+A completed bronze stage can build silver without the landing file:
+
+```bash
+uv run python scripts/ingest_full.py --stage silver --run artifacts/runs/<run-id>
 ```
 
-All heavy processing happens in a **local, repeatable batch command**. The hosted app only reads a compact serving snapshot. This keeps hosting simple and avoids running the 12.44 GB ingestion or paid model calls on page views.
+An incomplete stage leaves pending files for inspection; automatic mid-file resume is not implemented. A failed landing-to-bronze run may need to decompress the file again. Inspect incomplete outputs before retrying. Failures leave the last published serving database available to the app.
 
-| Layer | Grain and responsibility | Key control |
+The [two-file integration fixture](../tests/test_ingest.py) checks repeat-file idempotence, account updates, case-normalised domain deduplication, globally unique citations, and stale-AI removal through gold and serving.
+
+## Prioritisation
+
+A candidate domain comes from an observation's `domains` array. It is an evidence grouping key, not a resolved legal entity. The link model compares the domain with the HTTP host and certificate common name on each observation. A small explicit provider-domain list takes precedence over those matches.
+
+| Match status | App label | Meaning |
 | --- | --- | --- |
-| Landing | Original compressed file, unchanged | Record file checksum and byte count. |
-| Bronze | One source line per row of Parquet, with original UTF-8 text or undecodable bytes | Keep source file ID, line number, run ID, and content hash. No parsing or dropped source lines. |
-| Silver | One validated, typed observation per accepted source row | Read completed bronze parts, check core fields, keep selected nested data and vulnerability JSON, quarantine rejects. |
-| Gold | Candidate accounts, account-observation evidence links, rule-derived priority, and a separate validated AI-assessment table | Keep provenance, match strength, provider status, and source-set freshness. |
-| Serving | Compact account queue, selected evidence, and the hosted subset of gold AI notes | Publish only after reconciliation, citation, and freshness checks pass. |
+| `supported` | Both fields match | HTTP host and certificate name match on an observation, outside the known provider list. |
+| `partial` | One field matches | Only one of those fields matches. |
+| `unresolved` | No direct match | Neither matches. |
+| `provider_only` | Known provider domain | The domain is on the provider list; that list is incomplete. |
 
-The Python runner has two explicit, bounded stages. It streams the Zstandard source into bronze and publishes a bronze manifest. Only then does silver read the completed bronze Parquet parts, parse and validate each record, and publish silver plus a quarantine side output. Memory does not scale with the full decompressed 88.5 GB. Reconcile `source lines = bronze rows` and `bronze rows = silver rows + parse rejects + core rejects`; dbt staging then deduplicates exact content hashes. Each stage records the source hash, schema version, counts, and elapsed time. A failed build leaves the last good serving snapshot intact. A failed landing-to-bronze run may need to decompress the single Zstandard frame again; a completed bronze run lets silver replay without the landing file.
+The account retains its strongest match status. A double match can still identify a provider-operated service; it does not verify business ownership.
 
-### Validation contract and tool choices
+Priority is evaluated in order:
 
-Validation is layered: bronze preserves every source line, including malformed JSON or undecodable bytes; silver sends parsing and invalid core IP/port/transport/timestamp failures to a separate `quarantine.jsonl` with source identity and reason. PyArrow enforces the typed silver Parquet schema; dbt tests check model-level uniqueness, required fields, accepted values, and valid vulnerability JSON. The offline AI result has a strict JSON output schema plus evidence-ID checks. The silver manifest records counts and optional-field type issues, so an accepted row is not confused with a clean optional field.
+| Tier | Required evidence |
+| --- | --- |
+| `investigate_first` | At least one non-provider double-match observation carrying a scanner-verified vulnerability label. |
+| `review_next` | No direct verified label, but a double-match observation carrying vulnerability metadata. |
+| `research` | At least a partial account match, plus a vulnerability association or admin/login title. These can be on different observations; the tier therefore requires more research. |
+| `low_evidence` | All other candidates. |
 
-Pydantic would be reasonable for a small configuration or API boundary, but running a second Python object validator over all 11.8 million observations would duplicate the current core checks without a clear benefit. Similarly, pandas is useful for small exploratory tables, but the full pipeline already streams bounded Arrow batches and computes aggregates in DuckDB. The one-command runner expresses the actual one-snapshot build. If this became a scheduled feed, an **Airflow DAG** could call the bronze, silver, register, dbt, and export stages in dependency order; a scheduler and metadata service are not needed for this take-home run.
+The **research score** adds points per observation: HTTP-host match +20; certificate match +20; scanner-verified label +30, otherwise vulnerability metadata +5; admin/login title +10; non-null product +5. The SQL caps at 100, although the current terms total at most 85. An account uses its **maximum observation score**, not a sum across services. Queue order is tier, score, then domain. The export breaks score ties by supported-observation count before domain when selecting the hosted subset.
 
-### Incremental-load contract
+The exact rules live in [int_account_evidence.sql](../transform/models/int_account_evidence.sql) and [fct_accounts.sql](../transform/models/fct_accounts.sql). Weights are uncalibrated heuristics. A scanner's `verified` flag is retained as metadata; it does not prove current applicability. A login page alone is not a vulnerability.
 
-Treat each future arrival as an **immutable source file**. Register its checksum and source identifier first. If that file and processing version are already complete, skip bronze and silver. Append its new bronze/silver parts, then register completed arrivals together in one DuckDB transaction; when a source is reprocessed under a newer schema version, register only the newest complete version. The prototype **rebuilds the derived dbt tables** from cumulative silver on a new arrival; the full build took about 1.7 minutes in the latest run. Account evidence is deduplicated after domain normalisation, and citations use the globally unique source-record ID, so source line 1 in two files cannot collide. A two-file integration test checks the resulting gold account counts and serving evidence, not just ingestion counts. This is incremental **source loading** with a full derived-mart refresh. A targeted gold refresh would be a later optimisation.
+## Offline AI workflow
 
-Offline AI notes carry a hash of the immutable source-file set used for their assessment. After each dbt build, `register_ai_gold.py` validates curated notes against gold account evidence and publishes current notes to `analytics.account_ai_assessments`; `analytics.ai_assessment_build_info` records the source-set hash and stale count. The serving export refuses an out-of-date gold AI build and copies only notes for its hosted accounts. When another file arrives, stale notes are removed from gold and the serving snapshot, while the rule-based queue stays available. This is conservative: it invalidates even notes for unaffected accounts. A larger recurring feed should use an account-level evidence fingerprint to reassess only changed accounts and retain unchanged notes. The current approach favours correct lineage and bounded cost for this small prototype.
+Rules determine the queue. GPT-4.1 mini interprets a compact bundle of up to three observations for a selected domain and returns `decision`, `evidence_ids`, `reason`, and `next_action`. The default batch targets `review_next`; `ambiguous` and `investigate_first` are also supported. [The versioned skill](../skills/account-research/SKILL.md) defines the workflow; [prompt files](../prompts/account-research/) retain v1–v5.
 
-The supplied data is one snapshot, so **initial delivery is a full load**. A later full replacement snapshot, correction, or deletion would need an explicit source contract and snapshot-diff/retraction logic; append-only arrivals alone cannot prove which old observations have disappeared. A small fixture demonstrates a first load, a repeated no-op, a second file, malformed-record quarantine, and silver replay from bronze after removal of the landing file.
+No dedicated IP or port fields are sent to the model. The adapter redacts IP literals in evidence text and treats page titles/banners as untrusted data. Structured output and local validation check the result schema and cited IDs. The cache includes evidence, source-set hash, model, prompt version/content hash, and schema version.
 
-This prototype uses one schema version for the source run and silver contract. A future silver-only rule change would need an explicit rebuild/version policy; today, a new schema version creates a new run and registers only its latest complete result. This keeps the take-home runner simple while preserving the bronze-to-silver boundary and recovery from an incomplete silver stage.
+Publication is separate from generation:
 
-## Account logic and priorities
+- `publish_assessments.py` selects cautious batch results and combines them with individually curated demo notes. Unreviewed `supported` batch decisions are withheld. V5 also uses a lexical wording gate; it is a guardrail, not proof of good prose.
+- `register_ai_gold.py` checks status, citations visible in serving evidence, supported attribution, and source freshness. It stores one latest note per domain in `analytics.account_ai_assessments`.
+- `export_serving.py` copies current notes for hosted domains. Raw traces and rejected responses stay outside gold and outside the app.
 
-Domains, hostnames, HTTP host/title, certificates, product names, provider organisation, ports, timestamps, and vulnerability metadata are **evidence**, not proof of company ownership. Candidate accounts begin with attributable domains; an account-observation link stores the match method and contradictions. A provider's IP or cloud region is not automatically the customer's asset or sales territory. Missing company size, sector, contacts, and location remain `unknown` unless sourced separately.
+A new source file changes the source-set hash and invalidates older notes, including those for unchanged accounts. This conservative choice keeps stale suggestions out of serving. Account-level evidence hashes are a future optimisation.
 
-Deterministic rules normalise and deduplicate observations, identify provider/shared-hosting patterns, derive technical signals, and calculate a transparent investigation tier. The implemented signals use dataset vulnerability associations with their `verified` flags, product context, and administration/login page titles. Other proposed signals, such as EOL and certificate expiry, remain future work. On the full account model, 222,307 account-observation links carry vulnerability labels, but only 1,335 carry a scanner-verified label; neither number is a count of confirmed affected companies. Show the observation date, verification flag, and source evidence. Repeated scans cannot inflate a score; missing vulnerability metadata does not mean safe.
+The snapshot contains 46 notes: 37 passed batch publication checks and nine were individually curated for the demo, including the seven top-tier candidates. `reviewed_for_demo` does not mean independently verified ownership or security findings. The [25-case eval](../evals/README.md) records the prompt comparison and its limitations; draft labels still need independent human review.
 
-The queue uses four practical states: **investigate first** (7 domains with a direct match and scanner-verified vulnerability association on the same observation), **review next** (5,411 domains with a direct match and unverified vulnerability metadata on the same observation), **research** (27,929 with weaker evidence, including admin/login titles or verified labels only on indirectly linked observations), and **low evidence** (391,774). This same-observation condition prevents combining unrelated services into a strong signal. The default app view combines the first two tiers; both require human verification of the service operator and technical finding. These tiers do not assert a confirmed vulnerability or verified business ownership. The score is an investigation aid, not a probability of purchase. The rep can filter by technical signal, attribution, priority, and candidate domain. Observation dates and infrastructure country appear in evidence detail; company territory is unknown. The source covers only a short snapshot window, so a recency or territory filter would be misleading.
+After building the warehouse, the offline commands are:
 
-The app offers a **Direct domain matches only** toggle. It retains accounts with matching HTTP-host and certificate evidence and removes partial, unresolved, and known provider-only matches from the current view. The conservative provider list includes `1blu.de`, whose [official site identifies it as a hosting provider](https://www.1blu.de/); that domain had incorrectly ranked near the top before the list was updated. This is a rule-based evidence-strength filter, not a verified-business classifier: an unlisted infrastructure provider can still have matching host and certificate records for its own domain. The UI labels the main view a candidate queue and warns that business identity and service operation need confirmation before outreach. Firmographic or verified operator data would be needed to assert that a candidate is a target business. The toggle is off by default so the full hosted account set remains explorable.
+```bash
+# Free: select bundles for inspection
+uv run python scripts/enrich_accounts.py --limit 5 --prompt v5
+# Paid: requires OPENAI_API_KEY in the ignored .env file
+uv run python scripts/enrich_accounts.py --limit 5 --prompt v5 --live
+# Review results, then apply publication checks and refresh serving
+uv run python scripts/publish_assessments.py
+uv run python scripts/register_ai_gold.py
+uv run python scripts/export_serving.py
+```
 
-## One bounded AI workflow
+## Tracing and cost
 
-The LLM assesses a **small, selected account-evidence bundle** where a direct technical signal warrants a concise research brief or attribution is ambiguous. The default batch selector now uses `review_next` and requires the same direct scanner label to be present among the three evidence rows displayed in the app; `ambiguous` and `investigate_first` remain optional segments. Each bundle contains up to three observations for one candidate domain, not one call per raw row. API payloads include host, title, certificate, infrastructure organisation, product, rule flags, vulnerability-label counts, and source IDs. No dedicated IP or port fields are sent; the API adapter also redacts IP literals embedded in evidence text. Its structured result is `supported`, `needs_review`, or `insufficient_evidence`, with source observation IDs, a short reason, and the next research step. The v5 prompt calls unverified scanner labels unverified and asks for specific finding/operator checks. `Supported` means the supplied evidence supports an historical service association, not external verification. Invalid references or schema failures go to review. Every other eligible account still appears with a rule-only status. No LLM call happens on an app page view. The 100-account v2 batch produced 67 `supported` decisions that overstated what partial matches establish. We withheld all 67. The new 100-account v5 direct-signal batch returned `needs_review` for every candidate, but 96 reasons used wording that could imply a confirmed vulnerability and were withheld. Four passed the stricter wording gate. The app's "AI notes" view exposes 33 older cautious batch notes, four v5 direct-signal notes, two earlier reviewed cases, and seven individually reviewed top-tier briefs; each also appears within its account brief. These 46 notes are a narrow offline selection, not AI coverage of all 425,121 candidate domains.
+Every API attempt writes `artifacts/ai/traces.jsonl` with call ID/time, request, response, model, prompt/schema version, latency, input/output tokens, reservation, calculated cost, decision, validation outcome, and error. Cache hits make no API call. `ledger.sqlite3` holds both the cache and a persisted **US$10 cumulative ceiling**, including conservative reservations for failed calls with unknown usage. The hosted app needs no API key.
 
-The workflow is packaged as `skills/account-research/SKILL.md` with its trigger, input/output contract, dependent prompts, and worked example. Immutable prompt files in `prompts/` support future comparison; v3 tightens attribution wording, v4 adds the historical verified-label research step, and v5 handles unverified direct labels. `scripts/publish_assessments.py` extracts only cautious `needs_review` and `insufficient_evidence` batch results and combines them with nine individually reviewed examples. For v5, a lexical safety gate requires explicit unverified-label wording and an operator-verification action; it withholds overclaiming prose and normalises one unsafe action phrase. This is a publication guardrail, not a measured quality estimate. All seven top-tier v4 results required human review; one draft misspelled a domain and several called scanner labels verified vulnerabilities, so the published text was corrected while the original responses stayed in local traces. Legacy one-file citations are migrated deterministically to globally unique source-record IDs using the original file checksum. The gold AI registrar then requires a cited source record among the same top-three evidence rows selected for the app. A `supported` note requires both HTTP-host and certificate-domain flags on a cited observation, cannot be provider-only, and cannot come from the unreviewed batch. The gold table holds the decision, short rationale, next action, citations, model/prompt version, review status, assessment time, and source-set hash; raw model responses and call traces remain outside gold. These checks enforce the data contract and citation rules. AI outputs remain research suggestions and do not change outreach eligibility.
+The configured mini rate card is $0.40 per million input tokens and $1.60 per million output tokens. For an illustrative 1,000-account batch at 2,000 input and 300 output tokens per account:
 
-The [25-case prompt eval](../evals/results.md) uses 22 source-derived bundles and three explicit negative controls, with curated expected decisions and citation anchors. On the same cases and pinned model, v4-to-v5 decision accuracy rose from 60% to 96%; supported precision rose from 41.2% to 100%. V4 did not encode the newer policy requiring `needs_review` for unverified direct labels, so this is a policy-adherence comparison, not proof of vulnerability detection. V5 still misclassified one no-link negative control as `needs_review`, and none of the ten unverified-direct outputs passed the strict lexical wording gate. This small selected set cannot establish real-world vulnerability accuracy or verified company ownership. It does show why the AI decision and the prose-publication gate need separate checks; no raw eval output is served to users.
+`1,000 × (2,000 × $0.40 + 300 × $1.60) / 1,000,000 = $1.28`
 
-Every model attempt writes a JSONL trace with request/evidence IDs, response, model, prompt/schema version, latency, token usage, calculated cost, validation outcome, and decision/error. Raw traces stay local; redacted examples and metrics can go in the repo. Cache results by evidence hash, prompt version, model, and schema version. Website and banner text are untrusted input, never instructions.
+At one such batch per month, that is $1.28/month before retries. The measured 100-account v5 batch used smaller bundles and cost $0.054862. Across the recorded experiments and eval, 313 completed calls totalled $0.132145; 102 failed attempts retained $0.141941 of reservations, which are not confirmed charges. The rate card is in [llm_client.py](../welook/llm_client.py); review provider pricing before future runs.
 
-Trace contract, one JSON object per API attempt in ignored `artifacts/ai/traces.jsonl`: `call_id` and `at_utc` identify the attempt; `request.instructions` and `request.input` capture the prompt and evidence bundle; `model`, `prompt_version`, `prompt_sha256`, and `schema_version` identify the executable contract; `response`, `response_status`, `decision`, `validation`, and `error` record the outcome; `latency_ms`, `input_tokens`, `output_tokens`, `reserved_usd`, and `actual_usd` record performance and spend. A cache hit makes no API call and therefore creates no call trace. The SQLite ledger separately persists the reservation and final charge, including failed attempts whose usage is unknown.
+The client also supports a priced GPT-4.1 snapshot, but the published workflow uses mini. Stronger-model escalation would require evidence that it improves useful output. A production pilot could use a separate $25 monthly cap with a $15 alert; that policy is proposed, not implemented.
 
-**Spend ceiling: US$10 for the entire take-home**, including experiments, retries, and any offline enrichment. An illustrative first pass is 1,100 calls on GPT-4.1 mini at 2,000 input/400 output tokens each: `1,100 × ((2,000 × $0.40 + 400 × $1.60) / 1,000,000) = $1.584`. Fifty difficult cases on GPT-4.1 at the same sizes add `$0.36`; a 25% retry allowance gives approximately **$2.43**. These are [published mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) and [GPT-4.1](https://developers.openai.com/api/docs/models/gpt-4.1) rates checked for this design, not charges incurred. Reserve worst-case tokens before each call and refuse work that would exceed the $10 ledger.
+## Serving boundaries and next steps
 
-For a production pilot, set a separate **US$25 rolling-month ceiling** and alert at US$15; this is a proposed policy, not an implemented production deployment. For example, 10,000 changed accounts assessed once per month at the measured v5 average of US$0.000549 would use about US$5.49 in model charges. Larger bundles, stronger-model escalations, and retries consume the remaining headroom. A scheduler should stop new LLM work at the ceiling while keeping the deterministic queue available. Never re-assess unchanged evidence hashes, and do not make model calls on app page views.
+The export retains up to three evidence rows per domain, including the qualifying direct label for `review_next`. The app's product filter searches those selected rows only. AI notes are advisory and do not change priority. Shortlist/research updates live in Streamlit session state and must be exported to persist. CSV text is escaped to reduce spreadsheet-formula risk.
 
-The 100 completed v5 batch calls used US$0.054862 in recorded API usage, about US$0.000549 each. Across prompt versions and the eval, 313 completed local calls used US$0.132145. The ledger also retains 102 failed connection attempts with US$0.141941 in conservative reservations because actual API usage is unknown; those reservations are **not confirmed charges**. The final IP-redacted v4/v5 comparison reused 36 cache entries and charged US$0.006953 for 14 new completed calls; the earlier version of the eval incurred another 33 calls at US$0.016305 before redaction was added. At the observed v5 batch average, calling the model for all 50,000 hosted candidates would cost about US$27.43, before larger bundles and retries. A targeted 1,000-account review would be roughly US$0.55 at the same size. Neither volume nor budget can turn an evidence association into verified legal-business identity; the workflow therefore focuses on strong or ambiguous research cases rather than labelling the whole universe with an LLM.
-
-## Why this stack and how it is hosted
-
-| Component | Prototype choice | Reason |
-| --- | --- | --- |
-| Ingestion | Python generator + PyArrow | Familiar tools; bounded streaming and explicit validation. |
-| Storage/analytics | Parquet + DuckDB | Full local dataset without warehouse fees or a database server. |
-| Transformations | Small dbt-duckdb project | SQL models and data tests for the business logic; learn only what this pipeline needs. |
-| Runner | Sequential CLI with run manifests | One supplied snapshot does not need Airflow. |
-| App | Streamlit Community Cloud | Simple hosted, reviewer-accessible Python UI. Only the compact read-only serving file is deployed. |
-| Checks | One-command local fixture, dbt tests, and a 25-case prompt eval | Catch pipeline regressions, measure prompt decisions, and expose citation or wording failures. Offline re-scoring costs nothing; live prompt re-runs share the API budget. |
-
-The app opens on the direct-signal review queue, then offers search, view/signal/product filters, a selectable candidate table, and an account brief with rule-derived rationale, verification step, likely buyer role, selected source evidence, and any advisory AI note. For every `review_next` candidate, one of the three displayed observations contains the directly matched scanner label; the app exposes its scanner-listed vulnerability IDs as historical metadata so a researcher has a specific finding to check. These IDs do not confirm applicability. The product filter searches the up-to-three retained evidence rows per hosted account, not a complete technology inventory; missing results must not be read as product absence. A sidebar holds the session shortlist. A rep can assign a human research status and note plus a sourced company name and URL to a shortlisted candidate; both identity fields are required for the **Ready for sales review** status. This is a manual research checkpoint, not verified service ownership. The CSV handoff includes up to three selected source evidence IDs, up to five scanner-listed vulnerability IDs, any published AI note, the next action, and an explicit unverified-dataset-identity status. Text cells are escaped for spreadsheet formula safety. Shortlist decisions are browser-session state, so the UI asks the rep to export them. The serving export contains explicit sanitized fields, snapshot date, pipeline counts, and AI coverage. Keep the raw file, bronze/silver files, and model traces out of Git and hosting.
-
-This local design maps cleanly to a future S3 landing/Parquet lake, scheduled container jobs, Snowflake marts, and Airflow orchestration, but that production stack is outside the take-home scope. The snapshot contains no time series, confirmed buyer intent, named contacts, or verified ownership for every service. Those limitations remain visible in the product.
-
-## Build order and proof of completion
-
-1. **Done:** stream the full file into bronze, rebuild silver from bronze, reconcile 11,768,718 rows, and exercise incremental, replay, and quarantine fixtures.
-2. **Done:** build and test 425,121 candidate domains with dbt, then export an approximately 26 MB serving snapshot and run the Streamlit app locally.
-3. **Done for the prototype:** the traced, budgeted offline AI adapter exists and 46 advisory notes are in the serving snapshot, including all seven highest-priority candidates.
-4. **Done:** Streamlit is deployed and the hosted queue runs.
-
-The [planning document](planning.md) explains the sales use cases and desk research.
+The source does not establish buying intent, legal identity, contacts, company territory, or change over time. Priorities should be validated with sales users. Future work includes sourced business/operator enrichment, independent eval adjudication, full-evidence product summaries, persistent team workflows, and targeted mart/AI refreshes. For a recurring deployment, Airflow could schedule the existing stages over S3 and a warehouse; those services are outside this implementation.

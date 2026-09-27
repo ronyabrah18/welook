@@ -2,7 +2,7 @@
 
 Each valid record has equal probability of entering the final sample. This is
 a sample of observations, not unique businesses. No full decompressed copy is
-written. Run: python3 Task/scripts/profile_full_dataset.py
+written. Run from the repository root: uv run python scripts/profile_full_dataset.py
 """
 import argparse
 from collections import Counter
