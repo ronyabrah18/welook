@@ -1,123 +1,144 @@
 # WeLook architecture
 
-WeLook separates a local batch pipeline from a lightweight hosted app. The [architecture diagram](../README.md#architecture) shows the implemented flow. Python streams the source into Parquet, DuckDB/dbt builds candidate-domain marts, and Streamlit reads a compact exported database. There is no live scanner, scheduler, warehouse server, or API call on an app page view.
+WeLook has two parts:
 
-## Components and storage
+1. A local batch pipeline processes the large source file, builds the research tables, and prepares AI notes.
+2. A small hosted Streamlit app reads a compact DuckDB file.
 
-| Component | Responsibility | Location |
-| --- | --- | --- |
-| Landing | Immutable supplied JSONL.zst file | Local input path; default `b2_download_file_by_id` |
-| Bronze | One row per source line: original text, or undecodable bytes, with file/record hashes and lineage | `artifacts/runs/<run-id>/bronze/*.parquet` |
-| Silver | Typed observations with core validation, selected nested fields, and original vulnerability metadata | `artifacts/runs/<run-id>/silver/*.parquet` |
-| Quarantine | Rejected-record IDs and reasons; original content remains in bronze | `artifacts/runs/<run-id>/quarantine.jsonl` |
-| Warehouse | Registered silver views, dbt models, ingestion registry and gold AI table | `artifacts/warehouse/full.duckdb` |
-| Offline AI | Selected bundles, raw results, JSONL traces, SQLite cache and spend ledger | Ignored `artifacts/ai/` |
-| Publication inputs | Curated notes, batch notes that passed checks, and legacy citation mapping | `app/data/*assessments.jsonl`, `legacy_ai_source.json` |
-| Serving | `accounts`, `evidence`, `assessments`, `build_info` | `app/data/welook_serving.duckdb` |
-| App | Read-only queries, browser-session shortlist and CSV handoff | `app/app.py`, Streamlit Community Cloud |
+The Streamlit app does not process the 12.44 GB source file and does not call OpenAI when someone opens a page. This keeps the demo fast and inexpensive. The [README diagram](../README.md#architecture) shows the complete flow and row counts.
 
-`uv.lock` fixes the development dependencies. Hosting uses the smaller `app/requirements.txt`. Python generators and bounded PyArrow batches keep ingestion memory independent of the full decompressed file. DuckDB handles SQL aggregation; dbt supplies model dependencies and data tests. The sequential runner is sufficient for the supplied snapshot.
+## Main components
 
-## Pipeline order and quality gates
+| Stage or table | What it contains | Full-run rows |
+| --- | --- | ---: |
+| Landing | Supplied compressed JSONL source | 11,768,718 lines |
+| Bronze Parquet | Original record text, checksums, and source lineage | 11,768,718 |
+| Silver Parquet | Parsed and typed service observations | 11,768,718 |
+| Quarantine JSONL | IDs and reasons for rejected rows | 0 |
+| `raw.observations` | DuckDB view over released Silver files | 11,768,718 |
+| `analytics.stg_observations` | Deduplicated observations with verified-label count | 11,768,718 |
+| `analytics.int_account_evidence` | One row for each candidate-domain/observation link | 9,334,905 |
+| `analytics.fct_accounts` | One prioritised row per candidate domain | 425,121 |
+| `analytics.account_ai_assessments` | AI notes that passed publication checks | 46 |
+| Serving DuckDB | Hosted accounts, selected evidence, AI notes, and build metadata | 50,000 accounts |
 
-[`scripts/run_pipeline.py`](../scripts/run_pipeline.py) executes these steps:
+Python and PyArrow stream the compressed file into Parquet without loading the decompressed file into memory. DuckDB runs the local SQL workload. dbt defines the model order and data tests. Streamlit reads only the serving database.
 
-1. **Landing → bronze.** Hash the immutable input, stream-decompress it, and preserve each line with a globally unique source-record ID. Publish the bronze manifest after writing the parts.
-2. **Bronze → silver.** Read completed bronze parts, verify content hashes, parse JSON, and validate IP, port, transport, and timestamp. Record optional-field type issues; route parsing/core failures to quarantine.
-3. **Register silver.** Create `raw.observations` over completed arrivals and reconcile counts against `raw.ingestion_manifest` in a transaction.
-4. **Build and test dbt models.** `stg_observations` deduplicates content hashes; `int_account_evidence` normalises domains and evaluates source links; `fct_accounts` aggregates one candidate per domain and assigns priority.
-5. **Register gold AI assessments.** Validate existing publication inputs against current evidence and the source-set hash. This step does not call an LLM.
-6. **Export serving.** Write a pending database, copy the selected accounts and evidence, then atomically replace the app snapshot.
+## Pipeline order
 
-The reconciliations are `source lines = bronze rows` and `bronze rows = silver rows + rejected rows`. Any parse/core rejection marks the run `needs_review` and stops the runner before downstream publication. dbt failures also stop release. Optional-field issues are recorded but do not automatically reject an otherwise valid row. The full supplied run accepted all 11,768,718 rows; fixtures exercise malformed data and quarantine.
+[`scripts/run_pipeline.py`](../scripts/run_pipeline.py) runs the deterministic stages in this order:
 
-Bronze preserves line content without the line-ending bytes. Silver is a typed projection, not a second full copy of every JSON field: optional text is bounded and some fields are omitted. Source timestamps are preserved without an assumed timezone; timezone-aware inputs require an explicit policy. Records over 64 MiB stop ingestion rather than being truncated.
+1. Calculate the source-file checksum.
+2. Stream the source into Bronze Parquet and create stable source-record IDs.
+3. Parse Bronze, validate the core fields, and write valid rows to Silver. Invalid rows go to quarantine.
+4. Register all completed Silver files as `raw.observations`.
+5. Run and test the three dbt models: staging, evidence, and accounts.
+6. Register current published AI notes in the separate AI table. This step does not call an LLM.
+7. Export a new serving database and replace the previous one only after every check passes.
 
-## Incremental loading and recovery
+The main ingestion check is:
 
-The contract is **new immutable files**, not CDC or replacement snapshots. Each file's checksum and schema version identify its run. A repeated completed file skips bronze and silver. A new file adds parts; registration uses all completed arrivals, choosing only the latest complete schema version for each source.
-
-The derived dbt marts are **fully rebuilt** from cumulative silver. This is incremental source loading with a full mart refresh. Corrections and deletions need a future snapshot/retraction contract.
-
-A completed bronze stage can build silver without the landing file:
-
-```bash
-uv run python scripts/ingest_full.py --stage silver --run artifacts/runs/<run-id>
+```text
+Bronze rows = Silver rows + quarantined rows
 ```
 
-An incomplete stage leaves pending files for inspection; automatic mid-file resume is not implemented. A failed landing-to-bronze run may need to decompress the file again. Inspect incomplete outputs before retrying. Failures leave the last published serving database available to the app.
+The supplied file had no parse or core-field rejects, so all 11,768,718 rows reached Silver. Test fixtures still exercise the quarantine path.
 
-The [two-file integration fixture](../tests/test_ingest.py) checks repeat-file idempotence, account updates, case-normalised domain deduplication, globally unique citations, and stale-AI removal through gold and serving.
+## One example: `3ds.com`
+
+The source contains 627 observations linked with `3ds.com`.
+
+```text
+627 Bronze records
+→ 627 Silver observations
+→ 627 staged observations
+→ 627 int_account_evidence rows
+→ 1 fct_accounts row
+→ strongest 3 evidence rows sent to the AI workflow
+→ 1 reviewed AI note
+→ 1 candidate shown in Streamlit
+```
+
+The account row contains 627 total observations. Of these, 218 have both the HTTP host and certificate matching the candidate domain, 99 carry scanner vulnerability metadata, and four directly matched observations carry a scanner-verified label. Its research score is 75 and its priority is `investigate_first`.
+
+The AI does not receive all 627 rows. It receives the strongest three cited observations. The published note explains the historical domain-to-service link and asks the salesperson to check the scanner finding and current service operator before outreach. It does not claim that the company is currently vulnerable.
 
 ## Prioritisation
 
-A candidate domain comes from an observation's `domains` array. It is an evidence grouping key, not a resolved legal entity. The link model compares the domain with the HTTP host and certificate common name on each observation. A small explicit provider-domain list takes precedence over those matches.
+SQL rules assign every candidate to one tier:
 
-| Match status | App label | Meaning |
-| --- | --- | --- |
-| `supported` | Both fields match | HTTP host and certificate name match on an observation, outside the known provider list. |
-| `partial` | One field matches | Only one of those fields matches. |
-| `unresolved` | No direct match | Neither matches. |
-| `provider_only` | Known provider domain | The domain is on the provider list; that list is incomplete. |
-
-The account retains its strongest match status. A double match can still identify a provider-operated service; it does not verify business ownership.
-
-Priority is evaluated in order:
-
-| Tier | Required evidence |
+| Tier | Rule |
 | --- | --- |
-| `investigate_first` | At least one non-provider double-match observation carrying a scanner-verified vulnerability label. |
-| `review_next` | No direct verified label, but a double-match observation carrying vulnerability metadata. |
-| `research` | At least a partial account match, plus a vulnerability association or admin/login title. These can be on different observations; the tier therefore requires more research. |
-| `low_evidence` | All other candidates. |
+| `investigate_first` | The same observation has both domain matches and a scanner-verified label. |
+| `review_next` | A directly matched observation has unverified vulnerability metadata, with no directly matched verified label. |
+| `research` | There is at least a partial domain match and either vulnerability metadata or an admin/login title, but the stronger rules do not apply. |
+| `low_evidence` | The available evidence does not meet a higher tier. |
 
-The **research score** adds points per observation: HTTP-host match +20; certificate match +20; scanner-verified label +30, otherwise vulnerability metadata +5; admin/login title +10; non-null product +5. The SQL caps at 100, although the current terms total at most 85. An account uses its **maximum observation score**, not a sum across services. Queue order is tier, score, then domain. The export breaks score ties by supported-observation count before domain when selecting the hosted subset.
+The evidence score adds 20 for an HTTP-host match, 20 for a certificate match, 30 for a scanner-verified label (otherwise 5 for vulnerability metadata), 10 for an admin/login title, and 5 for a product value. An account uses its strongest observation score. The formula can produce 0–85; the full run observed 0–75. This is a research score, not a risk percentage or likelihood to buy.
 
-The exact rules live in [int_account_evidence.sql](../transform/models/int_account_evidence.sql) and [fct_accounts.sql](../transform/models/fct_accounts.sql). Weights are uncalibrated heuristics. A scanner's `verified` flag is retained as metadata; it does not prove current applicability. A login page alone is not a vulnerability.
+The exact rules are in [`int_account_evidence.sql`](../transform/models/int_account_evidence.sql) and [`fct_accounts.sql`](../transform/models/fct_accounts.sql).
 
-## Offline AI workflow
+## Rules and AI have different jobs
 
-Rules determine the queue. GPT-4.1 mini interprets a compact bundle of up to three observations for a selected domain and returns `decision`, `evidence_ids`, `reason`, and `next_action`. The default batch targets `review_next`; `ambiguous` and `investigate_first` are also supported. [The versioned skill](../skills/account-research/SKILL.md) defines the workflow; [prompt files](../prompts/account-research/) retain v1–v5.
+Rules handle work that must be repeatable:
 
-No dedicated IP or port fields are sent to the model. The adapter redacts IP literals in evidence text and treats page titles/banners as untrusted data. Structured output and local validation check the result schema and cited IDs. The cache includes evidence, source-set hash, model, prompt version/content hash, and schema version.
+- parsing and validation
+- deduplication
+- domain normalisation and provider screening
+- host and certificate matching
+- evidence scoring and priority
+- selection of compact AI inputs
 
-Publication is separate from generation:
+GPT-4.1 mini is used offline for one smaller task. It reads up to three observations and returns four structured fields: `decision`, `evidence_ids`, `reason`, and `next_action`. AI notes are advisory and never change the SQL priority.
 
-- `publish_assessments.py` selects cautious batch results and combines them with individually curated demo notes. Unreviewed `supported` batch decisions are withheld. V5 also uses a lexical wording gate; it is a guardrail, not proof of good prose.
-- `register_ai_gold.py` checks status, citations visible in serving evidence, supported attribution, and source freshness. It stores one latest note per domain in `analytics.account_ai_assessments`.
-- `export_serving.py` copies current notes for hosted domains. Raw traces and rejected responses stay outside gold and outside the app.
+Generation and publication are separate. [`publish_assessments.py`](../scripts/publish_assessments.py) withholds unsupported decisions or unsafe wording. [`register_ai_gold.py`](../scripts/register_ai_gold.py) checks the citations, attribution, review status, and source freshness before storing a note in Gold. Raw responses and rejected notes stay outside the app.
 
-A new source file changes the source-set hash and invalidates older notes, including those for unchanged accounts. This conservative choice keeps stale suggestions out of serving. Account-level evidence hashes are a future optimisation.
+## AI controls and cost
 
-The snapshot contains 46 notes: 37 passed batch publication checks and nine were individually curated for the demo, including the seven top-tier candidates. `reviewed_for_demo` does not mean independently verified ownership or security findings. The [25-case eval](../evals/README.md) records the prompt comparison and its limitations; draft labels still need independent human review.
+The AI workflow includes:
 
-After building the warehouse, the offline commands are:
+- versioned prompts in `prompts/`
+- a reusable workflow in `skills/account-research/SKILL.md`
+- strict structured-output validation
+- evidence-ID validation
+- JSONL traces for API attempts
+- a SQLite response cache and spend ledger
+- a persisted US$10 total ceiling
+- a source-set hash that prevents stale notes from reaching serving
 
-```bash
-# Free: select bundles for inspection
-uv run python scripts/enrich_accounts.py --limit 5 --prompt v5
-# Paid: requires OPENAI_API_KEY in the ignored .env file
-uv run python scripts/enrich_accounts.py --limit 5 --prompt v5 --live
-# Review results, then apply publication checks and refresh serving
-uv run python scripts/publish_assessments.py
-uv run python scripts/register_ai_gold.py
-uv run python scripts/export_serving.py
+Dedicated IP and port fields are not sent to the model. IP literals found inside text are redacted, and page titles are treated as untrusted data.
+
+The configured GPT-4.1 mini rates are $0.40 per million input tokens and $1.60 per million output tokens. An example 1,000-account batch with 2,000 input and 300 output tokens per account is:
+
+```text
+1,000 × (2,000 × $0.40 + 300 × $1.60) / 1,000,000 = $1.28
 ```
 
-## Tracing and cost
+The 100 completed calls in the measured v5 batch cost $0.054862. The hosted application needs no API key because all calls happen before publication. The 25-case eval compares prompt decisions and wording rules, but its labels are still draft labels awaiting independent review.
 
-Every API attempt writes `artifacts/ai/traces.jsonl` with call ID/time, request, response, model, prompt/schema version, latency, input/output tokens, reservation, calculated cost, decision, validation outcome, and error. Cache hits make no API call. `ledger.sqlite3` holds both the cache and a persisted **US$10 cumulative ceiling**, including conservative reservations for failed calls with unknown usage. The hosted app needs no API key.
+## New files and failures
 
-The configured mini rate card is $0.40 per million input tokens and $1.60 per million output tokens. For an illustrative 1,000-account batch at 2,000 input and 300 output tokens per account:
+The ingestion design supports new immutable files:
 
-`1,000 × (2,000 × $0.40 + 300 × $1.60) / 1,000,000 = $1.28`
+1. Identify each file by checksum and schema version.
+2. Skip it if the same completed file is already registered.
+3. Otherwise create new Bronze and Silver parts.
+4. Register all completed arrivals together.
+5. Rebuild the derived dbt tables from cumulative Silver data.
+6. Invalidate AI notes when their source-set hash is stale.
+7. Publish a new serving database only after all checks pass.
 
-At one such batch per month, that is $1.28/month before retries. The measured 100-account v5 batch used smaller bundles and cost $0.054862. Across the recorded experiments and eval, 313 completed calls totalled $0.132145; 102 failed attempts retained $0.141941 of reservations, which are not confirmed charges. The rate card is in [llm_client.py](../welook/llm_client.py); review provider pricing before future runs.
+This is incremental source loading followed by a full analytics rebuild. It is simple and appropriate for the take-home, but it does not yet handle source deletions, corrections, or mid-file resume. If a stage fails, the pending build is not published and Streamlit keeps using the last successful serving database.
 
-The client also supports a priced GPT-4.1 snapshot, but the published workflow uses mini. Stronger-model escalation would require evidence that it improves useful output. A production pilot could use a separate $25 monthly cap with a $15 alert; that policy is proposed, not implemented.
+## Serving and limits
 
-## Serving boundaries and next steps
+[`scripts/export_serving.py`](../scripts/export_serving.py) creates the small database used by Streamlit:
 
-The export retains up to three evidence rows per domain, including the qualifying direct label for `review_next`. The app's product filter searches those selected rows only. AI notes are advisory and do not change priority. Shortlist/research updates live in Streamlit session state and must be exported to persist. CSV text is escaped to reduce spreadsheet-formula risk.
+| Serving table | Purpose | Rows |
+| --- | --- | ---: |
+| `accounts` | Highest-ranked candidate domains | 50,000 |
+| `evidence` | Up to three selected observations per hosted domain | 96,107 |
+| `assessments` | Published AI research notes | 46 |
+| `build_info` | Counts, source hash, and build time | 1 |
 
-The source does not establish buying intent, legal identity, contacts, company territory, or change over time. Priorities should be validated with sales users. Future work includes sourced business/operator enrichment, independent eval adjudication, full-evidence product summaries, persistent team workflows, and targeted mart/AI refreshes. For a recurring deployment, Airflow could schedule the existing stages over S3 and a warehouse; those services are outside this implementation.
+A candidate domain is not automatically a verified company. The source also cannot establish current exposure, buying intent, company territory, or a named contact. WeLook is therefore a research queue: the salesperson still has to confirm the company, current service operator, technical finding, and business context.
